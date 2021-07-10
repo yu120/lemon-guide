@@ -4,39 +4,53 @@
 
 [TOC]
 
-# [OS](OS.md)
+# [1 OS](OS.md)
 
 提供OS
 
-# [JAVA](JAVA.md)
+
+
+# [2 JAVA](JAVA.md)
 
 提供JAVA
 
-# [Algorithm](Algorithm.md)
+
+
+# [3 Algorithm](Algorithm.md)
 
 提供Algorithm
 
-# [Database](Database.md)
+
+
+# [4 Database](Database.md)
 
 提供Database
 
-# [Middleware](Middleware.md)
+
+
+# [5 Middleware](Middleware.md)
 
 提供Middleware
 
-# [Solution](Solution.md)
+
+
+# [6 Solution](Solution.md)
 
 提供Solution
 
-# [Architecture](Architecture.md)
+
+
+# [7 Architecture](Architecture.md)
 
 提供Architecture
 
-# [DevOps](DevOps.md)
+
+
+# [8 DevOps](DevOps.md)
 
 本章节主要总结并收纳了常用的JDK工具、Linux命令、Shell语法、Git命令、测试工具、Docker等。
 
-## JDK Tools
+## 8.1 JDK Tools
 
 - `jps`：用于查看JAVA进程编号。
 - `jstat`：用于打印GC回收统计信息，便于分析是否出现FGC等情况。
@@ -50,21 +64,25 @@
 
 
 
-## Linux Command
+## 8.2 Linux Command
 
-## Shell
+## 8.3 Shell
 
-## Git
+## 8.4 Git
 
-## Test Tools
+## 8.5 Test Tools
 
-## Docker
+## 8.6 Docker
 
-# [BigData](BigData.md)
+
+
+# [9 BigData](BigData.md)
 
 提供BigData
 
-# [Others](Others.md)
+
+
+# [10 Others](Others.md)
 
 提供Others 
 
