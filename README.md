@@ -85,9 +85,24 @@
 
 ## 8.3 Shell
 
+收纳了Shell脚本的变量、数组、算术运算、字符串、条件判断、流程控制等基本语法，学完后就可自己写Shell脚本。
+
+
+
 ## 8.4 Git
 
+收纳了Git相关的常用命令，如：`git clone`、`git add`、`git rm`、`git commit`、`git branch`、`git tag`、`git push`、`git pull`、`git log`、`git remote`、`git fetch`、`git reset`等。
+
+
+
 ## 8.5 Test Tools
+
+![Junit-Summary-Report](images/README/Junit-Summary-Report.png)
+
+- **AB**：ApacheBench (ab)是 Apache 网站服务器软件附带的工具，专门用来做HTTP接口的性能测试
+- **Jmeter**：Apache JMeter是Apache组织开发的基于Java的压力测试工具。用于对软件做压力测试
+
+
 
 ## 8.6 Docker
 
