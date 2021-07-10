@@ -773,7 +773,7 @@ java -agentpath:/root/build/libasyncProfiler.so=start,svg,file=profile.svg -jar 
 运行一段时间后，停止进程，可以看到在当前目录下，生成了 profile.svg 文件，这个文件是可以用浏览器打开的。
 如下图所示，纵向，表示的是调用栈的深度；横向，表明的是消耗的时间。所以格子的宽度越大，越说明它可能是一个瓶颈。一层层向下浏览，即可找到需要优化的目标。
 
-![Java火焰图](images/DevOps/Java火焰图.gif)
+![Java火焰图](../lemon-guide-private/images/DevOps/Java火焰图.gif)
 
 
 
@@ -2300,13 +2300,17 @@ e.g:
 
 # Pack
 
-## 其它
+## nohup
 
 当写完一个Spring boot Maven 工程，使用 mvn clean package 打包成可运行的jar文件后，可使用如下命令开始执行：
 
 ```shell
 nohup java -Xloggc:${logging_file_location}gc.log -XX:+PrintGCDetails -jar app.jar --spring.profiles.active=${environment} --logging.file.location=${logging_file_location} --domain=com.xx.xxx.xxxx > /dev/null 2>&1 &
 ```
+
+
+
+## jsw
 
 
 
@@ -2321,26 +2325,25 @@ nohup java -Xloggc:${logging_file_location}gc.log -XX:+PrintGCDetails -jar app.j
 ### 镜像命令
 
 ```sh
-# 列出 Docker  本地镜像列表$ docker images$ docker image ls -a# 运行 Docker 镜像（守护态方式）$ docker run -d {镜像名}# 删除指定 Docker 镜像$ docker  image rm {镜像名}
+# 列出 Docker  本地镜像列表
+$ docker images
+$ docker image ls -a
+# 运行 Docker 镜像（守护态方式）
+$ docker run -d {镜像名}
+# 删除指定 Docker 镜像
+$ docker  image rm {镜像名}
 ```
 
 
 
 ### 容器命令
 
-
-
 ```bash
-# 列出正在运行的容器$ docker ps -a# 列出所有容器（包括已停止容器）$ docker ps -l
+# 列出正在运行的容器
+$ docker ps -a
+# 列出所有容器（包括已停止容器）
+$ docker ps -l
 ```
-
-
-
-```bash
-
-```
-
-：
 
 ```bash
 $ docker exec -it {容器ID} /bin/bash
@@ -2441,6 +2444,8 @@ MySQL不像Oracle那样支持函数索引，即时是函数内的字段有索引
 `规则3`：**用IN来替换OR**
 
 MySQL对IN做了优化，即将IN中的常量全部存储在数组里，且排好序。但IN中的数值较多时，产生的消耗也比较大。连续数值可以用BETWEEN，而非IN。
+
+
 
 ### 分页
 
