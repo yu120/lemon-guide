@@ -38,23 +38,17 @@
 
 ## JDK Tools
 
-`jps`：用于查看JAVA进程编号。
+- `jps`：用于查看JAVA进程编号。
+- `jstat`：用于打印GC回收统计信息，便于分析是否出现FGC等情况。
+- `jstack`：用于dump出指定进程中的线程堆栈快照信息，便于排查应用是否有锁、死锁或排查CPU占比高的线程代码。
+- `jmap`：用于dump出指定进程中当前内存的快照信息，便于分析内存的内容结构，从而定位内存泄漏等问题。
+- `jhat`：用于
+- `jconsole`：
+- `jvisualvm`：
+- `jmc`：
+- `EclipseMAT`：
 
-`jstat`：用于打印GC回收统计信息，便于分析是否出现FGC等情况。
 
-`jstack`：用于dump出指定进程中的线程堆栈快照信息，便于排查应用是否有锁、死锁或排查CPU占比高的线程代码。
-
-`jmap`：用于dump出指定进程中当前内存的快照信息，便于分析内存的内容结构，从而定位内存泄漏等问题。
-
-`jhat`：用于
-
-`jconsole`：
-
-`jvisualvm`：
-
-`jmc`：
-
-`EclipseMAT`：
 
 ## Linux Command
 
