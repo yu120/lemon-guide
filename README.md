@@ -54,8 +54,6 @@
 
 ![Visual-GC](images/README/Visual-GC.png)
 
-![jfr-code](images/README/jfr-code.jpg)
-
 - **jps**：用于查看JAVA进程编号
 - **jstat**：用于打印GC回收统计信息，便于分析是否出现FGC等情况
 - **jstack**：用于dump出指定进程中的线程堆栈快照信息，便于排查应用是否有锁、死锁或排查CPU占比高的线程代码
