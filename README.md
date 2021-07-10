@@ -52,6 +52,10 @@
 
 ## 8.1 JDK Tools
 
+![Visual-GC](images/README/Visual-GC.png)
+
+![jfr-code](images/README/jfr-code.jpg)
+
 - **jps**：用于查看JAVA进程编号
 - **jstat**：用于打印GC回收统计信息，便于分析是否出现FGC等情况
 - **jstack**：用于dump出指定进程中的线程堆栈快照信息，便于排查应用是否有锁、死锁或排查CPU占比高的线程代码
@@ -65,6 +69,19 @@
 
 
 ## 8.2 Linux Command
+
+![htop](images/README/htop.png)
+
+- **基本命令**：`vi/vim`、`scp`、`tar`、`su`、`df`、`tail`、`grep`、`awk`、`find`、`netstat`、`echo`、`telnet`、`rpm`、`yum`等
+- **监控命令**
+  - **Memory**：`free`、`vmstat`
+  - **CPU**：`top`、`htop`、`sar`
+  - **IO**：`iostat`、`pidsta`、`iotop`
+  - **Network**：`netstat`、`iftop`、`tcpdump`
+  - **Others**：`dstat`、`saidar`、`Glances`
+- **瓶颈排查**：定位线上最耗CPU的线程、定位丢包错包情况、查看网络错误、包的重传率等
+
+
 
 ## 8.3 Shell
 
