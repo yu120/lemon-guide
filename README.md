@@ -50,7 +50,7 @@
 
 ## 2.3 Queue
 
-![Thread-NEW](images/README/Thread-NEW-1626703598534.png)
+![队列类图](images/README/队列类图.png)
 
 收纳整理了BlockingQueue（ArrayBlockingQueue、LinkedBlockingQueue、PriorityBlockingQueue、SynchronousQueue、DelayQueue）、BlockingDeque（LinkedBlockingDeque）、TransferQueue（LinkedTransferQueue）等知识点。
 
@@ -138,25 +138,80 @@
 
 # [4 Database](Database.md)
 
-收纳整理了、、、、、、、、等知识点。
+收纳整理了数据库6种范式、9种连接方式、4种事务隔离级别、索引、SQL优化、存储引擎、MYSQL原理、MYSQL高可用方案等知识点。
+
+## 4.1 数据库范式
+
+收纳整理了第一范式(1NF)、第二范式(2NF)、第三范式(3NF)、巴斯-科德范式（BCNF）、第四范式（4NF）、第五范式（5NF）等知识点。
+
+
+
+## 4.2 连接方式
+
+![SQL所有JOIN](images/README/SQL所有JOIN.png)
+
+收纳整理了内连接（INNER JOIN）、左连接（LEFT JOIN）、右连接（RIGHT JOIN）、全连接（FULL OUTER JOIN）、LEFT JOIN EXCLUDING INNER JOIN、RIGHT JOIN EXCLUDING INNER JOIN、FULL OUTER JOIN EXCLUDING INNER JOIN、CROSS JOIN、SELF JOIN等知识点。
+
+
+
+## 4.3 事务
+
+| 隔离级别                     | 第一类丢失更新 | 第二类丢失更新 | 脏读 | 不可重复读 | 幻读 |
+| ---------------------------- | -------------- | -------------- | ---- | ---------- | ---- |
+| SERIALIZABLE （串行化）      | ×              | ×              | ×    | ×          | ×    |
+| REPEATABLE READ（可重复读）  | ×              | ×              | ×    | ×          | √    |
+| READ COMMITTED （读已提交）  | ×              | √              | ×    | √          | √    |
+| READ UNCOMMITTED（读未提交） | ×              | √              | √    | √          | √    |
+
+收纳整理了事务特性（ACID），隔离级别Serializable（串行化）、Repeatable Read（可重复读）、Read Committed（读已提交）、Read uncommitted（读未提交）、SpringBoot Transaction等知识点。
+
+
+
+## 4.4 索引
+
+收纳整理了索引结构二叉树、红黑树、Hash、B-Tree、B+Tree，索引类型普通索引、复合索引、唯一索引、主键索引、全文索引等知识点。
+
+
+
+## 4.5 MYSQL原理
+
+![MySQL架构设计](images/README/MySQL架构设计.jpg)
+
+收纳整理了MYSQL架构设计、日志系统、查询过程、全局锁表锁&行锁、复制原理等知识点。
+
+
+
+## 4.6 高可用方案
+
+![MySQL-Cluster](images/README/MySQL-Cluster.jpg)
+
+收纳整理了主从或主主半同步复制、双通道复制、MHA+多节点集群、ZooKeeper+Proxy、SAN共享储存、DRBD磁盘复制、MySQL Cluster、Galera、Paxos等知识点。
 
 
 
 # [5 Middleware](Middleware.md)
 
-收纳整理了、、、、、、、、等知识点。
+![DubboArchitecture](images/README/DubboArchitecture.png)
+
+收纳整理了SPI、Redis、RocketMQ、Zookeeper、Netty、RabbitMQ、Dubbo、Nacos、Sentinel、Influxdb、Spring、SpringCloud、MyBatis、Nginx、LVS、Keepalived、HAProxy等知识点。
 
 
 
 # [6 Solution](Solution.md)
 
-收纳整理了、、、、、、、、等知识点。
+![ServiceDowngrade](images/README/ServiceDowngrade.png)
+
+收纳整理了注册中心、API网关、服务编排、服务降级、断路器、链路追踪、幂等机制、分布式ID、分布式限流、分布式缓存、消息队列、分布式事务、分库分表、全链路压测、配置中心、服务框架等知识点。
 
 
 
 # [7 Architecture](Architecture.md)
 
-收纳整理了、、、、、、、、等知识点。
+![分层设计](images/README/分层设计.png)
+
+![微服务技术架构体系](images/README/微服务技术架构体系.jpg)
+
+收纳整理了架构演进、架构规范、OAuth2.0、用户体系、权限设计、订单支付、分布式锁、数据脱敏、附近的人、亿级数据统计、短信服务、安全漏洞等知识点。
 
 
 
@@ -218,15 +273,31 @@
 
 ## 8.6 Docker
 
+Docker常用命令。
+
+
+
+## 8.7 Nginx
+
+收纳了Nginx常用配置和应用场景配置案例等知识点。
+
 
 
 # [9 BigData](BigData.md)
 
-收纳整理了、、、、、、、、等知识点。
+![Hadoop生态架构图](images/README/Hadoop生态架构图.png)
+
+收纳整理了Hadoop、Flume、Kafka、HBase、HDFS、Apache Storm、Apache Spark、Apache Flink等知识点。
 
 
 
 # [10 Others](Others.md)
 
-收纳整理了、、、、、、、、等知识点。
+收纳整理了常用软件（画图工具、数据抓包、SSH、Chrome、代码对比等）、IDEA常见设置图解、常用插件、功能插件、产品经理常用软件、管理总结（时间管理、项目管理、团队管理、知识卡片、演讲能力）等知识点。
+
+
+
+
+
+最后，还提供了文档中部分图片的原稿文件（support目录下），方便各位使用进行二次加工使用。同时还提供了笔者日常使用的Markdown编辑软件Tyora的一份自定义主题（提供黑暗主题）包（support/lry.css和support/lry-darcula.css），主要实现了Markdown文档自动编号问题，同时渲染了部分效果。
 
