@@ -6,13 +6,69 @@
 
 # [1 OS](OS.md)
 
-提供OS
+## 1.1 TCP
+
+![TCP状态](images/README/TCP状态.png)
+
+收纳了网络模型、TCP三次握手、TCP四次挥手、TCP优化、常见TCP问题、Socket和TCP主要源码等知识点。
+
+
+
+## 1.2 HTTP
+
+收纳了HTTP缓存流程、强制缓存、协商缓存、请求流程、常见请求/响应头参数、状态码、请求方法等知识点。
+
+
+
+## 1.3 OS
+
+收纳了常见处理器介绍、虚拟内存、内存分段、内存分页、内存管理、进程和线程等知识点。
 
 
 
 # [2 JAVA](JAVA.md)
 
-提供JAVA
+## 2.1 J.U.C
+
+收纳整理了Unsafe、LockSupport、CAS机制、AQS框架、Condition、volatile、lambda、Striped64、LongAdder、Semaphore、CyclicBarrier、CountDownLatch、CompletableFuture等知识点。
+
+
+
+## 2.2 集合
+
+收纳整理了ArrayList、LinkedList、Vector、CopyOnWriteArrayList、HashSet、TreeSet、LinkHashSet、ConcurrentSkipListSet、CopyOnWriteArraySet、ConcurrentSkipListSet、HashMap、TreeMap、HashTable、LinkHashMap、ConcurrentHashMap、ConcurrentSkipListMap等知识点。
+
+
+
+## 2.3 Queue
+
+
+
+## 2.4 Thread
+
+
+
+## 2.5 Lock
+
+
+
+## 2.6 I/O
+
+
+
+## 2.7 Classloader
+
+
+
+## 2.8 Throwable
+
+
+
+## 2.9 JVM
+
+
+
+## 2.10 GC
 
 
 
