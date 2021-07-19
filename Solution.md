@@ -1,7 +1,5 @@
 <div style="color:#16b0ff;font-size:50px;font-weight: 900;text-shadow: 5px 5px 10px var(--theme-color);font-family: 'Comic Sans MS';">Solution</div>
 
-<span style="color:#16b0ff;font-size:20px;font-weight: 900;font-family: 'Comic Sans MS';">Author</span>：李茹钰（`echo`）
-
 <span style="color:#16b0ff;font-size:20px;font-weight: 900;font-family: 'Comic Sans MS';">Introduction</span>：收纳技术相关的 `幂等`、`限流`、`降级`、`断路器`、`事务`、`缓存`、`分库分表` 等总结！
 
 [TOC]
