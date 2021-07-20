@@ -3865,7 +3865,22 @@ Mybatis是一个半ORM（对象关系映射）框架，它内部封装了JDBC，
 
 ## MyBatis架构
 
-![Mybatis架构](images/Middleware/Mybatis架构.jpg)
+![Mybatis核心成员数据流](images/Middleware/Mybatis核心成员数据流.png)
+
+核心成员说明
+
+| 核心成员         | 功能说明                                                     |
+| ---------------- | ------------------------------------------------------------ |
+| Configuration    | 保存MyBatis大部分配置信息                                    |
+| SqlSession       | MyBatis主要的顶层API，与数据库交互，实现数据库增删改查功能   |
+| Executor         | MyBatis 调度器，负责SQL语句的生成和查询缓存的维护            |
+| StatementHandler | 封装JDBC，负责对JDBC statement 的操作，如设置参数等          |
+| ParameterHandler | 用户传递的参数转换成JDBC Statement 所对应的数据类型          |
+| ResultSetHandler | 负责将JDBC返回的ResultSet结果集对象转换成List类型的集合      |
+| TypeHandler      | 负责java数据类型和jdbc数据类型(也可以说是数据表列类型)之间的映射和转换 |
+| MappedStatement  | MappedStatement维护一条<select\|update\|delete\|insert>节点的封装 |
+| SqlSource        | 负责根据用户传递的parameterObject，动态地生成SQL语句，将信息封装到BoundSql对象中，并返回 |
+| BoundSql         | 表示动态生成的SQL语句以及相应的参数信息                      |
 
 
 
@@ -3885,7 +3900,7 @@ Mapper接口里的方法，是不能重载的，因为是使用 全限名+方法
 
 ## MyBatis缓存
 
-MyBatis 中有一级缓存和二级缓存，默认情况下一级缓存是开启的，而且是不能关闭的。一级缓存是指 SqlSession 级别的缓存，当在同一个 SqlSession 中进行相同的 SQL 语句查询时，第二次以后的查询不会从数据库查询，而是直接从缓存中获取，一级缓存最多缓存 1024 条 SQL。二级缓存是指可以跨 SqlSession 的缓存。是 mapper 级别的缓存，对于 mapper 级别的缓存不同的sqlsession 是可以共享的。
+MyBatis 中有一级缓存和二级缓存，默认情况下一级缓存是开启的，而且是不能关闭的。一级缓存是指 SqlSession 级别的缓存，当在同一个 SqlSession 中进行相同的 SQL 语句查询时，第二次以后的查询不会从数据库查询，而是直接从缓存中获取，一级缓存最多缓存 1024 条 SQL。二级缓存是指可以跨 SqlSession 的缓存。是 mapper 级别的缓存，对于mapper级别的缓存不同的sqlsession 是可以共享的。一级缓存核心类是PerpetualCache，本质是一个hashMap。二级缓存默认不开启。
 
 ![MyBatis缓存机制](images/Middleware/MyBatis缓存机制.png)
 
