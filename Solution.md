@@ -1986,12 +1986,13 @@ DELETE FROM method_lock WHERE lock_key ='methodName';
 
 ```mysql
 CREATE TABLE `methodLock` (
-    `id` INT ( 11 ) NOT NULL AUTO_INCREMENT COMMENT '主键',
-    `method_name` VARCHAR ( 64 ) NOT NULL DEFAULT '' COMMENT '锁定的方法名',
-    `desc` VARCHAR ( 1024 ) NOT NULL DEFAULT '备注信息',
-    `update_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '保存数据时间，自动生成',
+      `id` int(11) unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
+      `lock_key` varchar(64) NOT NULL DEFAULT '' COMMENT '锁的键值',
+      `lock_timeout` datetime NOT NULL DEFAULT NOW() COMMENT '锁的超时时间',
+      `remarks` varchar(255) NOT NULL COMMENT '备注信息',
+      `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY ( `id` ),
-    UNIQUE KEY `uidx_method_name` ( `method_name ` ) USING BTREE 
+    UNIQUE KEY `uidx_lock_key` ( `lock_key ` ) USING BTREE 
 ) ENGINE = INNODB DEFAULT CHARSET = utf8 COMMENT = '锁定中的方法';
 ```
 
@@ -2007,7 +2008,7 @@ public boolean lock() {
         // 循环阻塞，等待获取锁
         while (true) {
             // 执行获取锁的sql
-            String sql = "select * from methodLock where method_name = xxx for update";
+            String sql = "select * from methodLock where lock_key = xxx for update";
              // 创建prepareStatement对象，用于执行SQL
             ps = conn.prepareStatement(sql);
             // 获取查询结果集
