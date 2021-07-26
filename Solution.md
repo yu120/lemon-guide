@@ -2135,7 +2135,7 @@ private static final String SUCCESS = "OK";
  }
 ```
 
-- 加锁操作 `jedis.set(key,value,"NX","EX",timeOut)`【保证加锁的原子操作】
+- 加锁操作 `jedis.set(key,value,"NX","EX",timeout)`【保证加锁的原子操作】
 - `key`是`redis`的`key`值作为锁的标识，`value`在作为客户端的标识，只有`key-value`都比配才有删除锁的权利【保证安全性】
 - 通过`timeout`设置过期时间保证不会出现死锁【避免死锁】
 - `NX`：只有这个`key`不存才的时候才会进行操作，`if not exists`
