@@ -997,18 +997,18 @@ Zookeeper主要靠其 **分布式数据一致性** 为集群提供 **分布式�
 - **LEADING：**当前Server即为选举出来的Leader
 - **FOLLOWING：**Leader已经选举出来，当前Server与之同步
 
-
+![Zookeeper中的角色](images/Middleware/Zookeeper中的角色.jpg)
 
 Zookeeper集群中，有Leader、Follower和Observer三种角色
 
-- **Leader**
+- **领导者（Leader）**：负责进行投票的发起和决议，更新系统状态
 
   Leader服务器是整个ZooKeeper集群工作机制中的核心，其主要工作：
 
   - 事务请求的唯一调度和处理者，保证集群事务处理的顺序性
   - 集群内部各服务的调度者
 
-- **Follower**
+- **跟随者（Follower）**：用于接收客户端请求并给客户端返回结果，在选主过程中进行投票
 
   Follower服务器是ZooKeeper集群状态的跟随者，其主要工作：
 
@@ -1016,7 +1016,7 @@ Zookeeper集群中，有Leader、Follower和Observer三种角色
   - 参与事务请求Proposal的投票
   - 参与Leader选举投票
 
-- **Observer**
+- **观察者（Observer）**：可以接受客户端连接，将写请求转发给 leader，但是observer 不参加投票的过程，只是为了扩展系统，提高读取的速度
 
   Observer是3.3.0 版本开始引入的一个服务器角色，它充当一个观察者角色——观察ZooKeeper集群的最新状态变化并将这些状态变更同步过来。其工作：
 
@@ -1025,14 +1025,39 @@ Zookeeper集群中，有Leader、Follower和Observer三种角色
 
 
 
-## Zookeeper下Server工作状态
+## 数据模型
+
+Zookeeper 的数据模型：
+
+- 层次化的目录结构，命名符合常规文件系统规范，类似于Linux
+- 每个节点在zookeeper中叫做znode,并且其有一个唯一的路径标识
+- 节点Znode可以包含数据和子节点，但是EPHEMERAL类型的节点不能有子节点
+- Znode中的数据可以有多个版本，比如某一个路径下存有多个数据版本，那么查询这个路径下的数据就需要带上版本
+- 客户端应用可以在节点上设置监视器
+- 节点不支持部分读写，而是一次性完整读写
+
+![Zookeeper的数据模型](images/Middleware/Zookeeper的数据模型.jpg)
+
+
+
+## Server工作状态
 
 服务器具有四种状态，分别是 LOOKING、FOLLOWING、LEADING、OBSERVING。
 
-- 1.LOOKING：寻找Leader状态。当服务器处于该状态时，它会认为当前集群中没有 Leader，因此需要进入 Leader 选举状态
-- 2.FOLLOWING：跟随者状态。表明当前服务器角色是Follower
-- 3.LEADING：领导者状态。表明当前服务器角色是Leader
-- 4.OBSERVING：观察者状态。表明当前服务器角色是Observer
+- LOOKING：寻找Leader状态。当服务器处于该状态时，它会认为当前集群中没有 Leader，因此需要进入 Leader 选举状态
+- FOLLOWING：跟随者状态。表明当前服务器角色是Follower
+- LEADING：领导者状态。表明当前服务器角色是Leader
+- OBSERVING：观察者状态。表明当前服务器角色是Observer
+
+
+
+## 运行模式
+
+Zookeeper 有三种运行模式：单机模式、伪集群模式和集群模式。
+
+- **单机模式**：这种模式一般适用于开发测试环境，一方面我们没有那么多机器资源，另外就是平时的开发调试并不需要极好的稳定性。
+- **集群模式**：一个 ZooKeeper 集群通常由一组机器组成，一般 3 台以上就可以组成一个可用的 ZooKeeper 集群了。组成 ZooKeeper 集群的每台机器都会在内存中维护当前的服务器状态，并且每台机器之间都会互相保持通信。
+- **伪集群模式**：这是一种特殊的集群模式，即集群的所有服务器都部署在一台机器上。当你手头上有一台比较好的机器，如果作为单机模式进行部署，就会浪费资源，这种情况下，ZooKeeper 允许你在一台机器上通过启动不同的端口来启动多个 ZooKeeper 服务实例，以此来以集群的特性来对外服务。
 
 
 
