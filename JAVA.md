@@ -383,6 +383,7 @@ public class TestCase {
 #### map
 
 **转换功能，内部就是Function接口。惰性求值。**
+
 ![lambda-map](images/JAVA/lambda-map.jpg)
 
 ```java
@@ -513,8 +514,7 @@ public class TestCase {
     }
 }
 
-// 输出结果
-// 10
+// 输出结果：10
 ```
 
 我们看得reduce接收了一个初始值为0的累加器，依次取出值与累加器相加，最后累加器的值就是最终的结果。

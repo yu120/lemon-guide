@@ -1746,6 +1746,7 @@ Leaf-segment方案可以生成趋势递增的ID，同时ID号是可计算的，�
 `Tinyid`是基于号段模式原理实现的与`Leaf`如出一辙，每个服务获取一个号段（1000,2000]、（2000,3000]、（3000,4000]
 
 ![滴滴（TinyID）](images/Solution/滴滴（TinyID）.png)
+
 `Tinyid`提供`http`和`tinyid-client`两种方式接入。
 
 
