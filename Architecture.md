@@ -4176,3 +4176,217 @@ DDoS 攻击，英文全称是 Distributed Denial of Service，谷歌翻译过来
 - 拉模式：推模式相反，拉模式则是，用户每次刷新 feed 第一页，都去遍历关注的人，把最新的动态拉取回来
 
 一般采用推拉结合的方式，用户发送状态之后，先推送给粉丝里面在线的用户，然后不在线的那部分等到上线的时候再来拉取。另外冷热数据分离，用户关系在缓存里面可以设置一个过期时间，比如七天。七天没上线的可能就很少用这个 APP。
+
+
+
+# Redis应用场景
+
+## 数据缓存
+
+- **热点数据缓存**：如报表、明星出轨、对象缓存、全页缓存都可以提升热点数据的访问速度
+- **中间数据缓存**：如导入导出计算中的中间状态数据缓存，以防内存溢出和提升了计算获取数据的速度
+
+
+
+## 分布式锁
+
+String 类型setnx方法，只有不存在时才能添加成功，返回true。
+
+```java
+public static boolean getLock(String key, long expireTime) {
+    Long flag = jedis.setnx(key, "1");
+    if (flag == 1) {
+        jedis.expire(key, expireTime);
+    }
+    
+    return flag == 1;
+    // NX 不存在则操作，EX 设置有效期单位是秒
+    // return "OK".equals(jedis.set(key, requestId, "NX", "EX", expireTime));
+}
+
+public static void releaseLock(String key) {
+    jedis.del(key);
+}
+```
+
+
+
+## 全局ID
+
+**利用int类型的incrby的原子性**
+
+- 分库分表ID：一次性拿一号段
+- 订单ID：一次性拿一个号段
+
+
+
+## 计数器
+
+**int类型，incr方法**
+
+例如：文章的阅读量、微博点赞数、允许一定的延迟，先写入Redis再定时同步到数据库
+
+
+
+## 限流
+
+**int类型，incr方法**
+
+以访问者的ip和其他信息作为key，访问一次增加一次计数，超过次数则返回false。
+
+
+
+## 位统计
+
+String类型的bitcount（1.6.6的bitmap数据结构介绍）。字符是以8位二进制存储的。
+
+```shell
+set k1 a
+setbit k1 6 1
+setbit k1 7 0
+get k1 
+
+# 6 7 代表的a的二进制位的修改
+# a 对应的ASCII码是97，转换为二进制数据是01100001
+# b 对应的ASCII码是98，转换为二进制数据是01100010
+```
+
+在线用户统计，留存用户统计：
+
+```shell
+setbit onlineusers 01 
+setbit onlineusers 11 
+setbit onlineusers 20
+```
+
+支持按位与、按位或等等操作：
+
+- `BITOPANDdestkeykey[key...]`：对一个或多个 key 求逻辑并，并将结果保存到 destkey
+- `BITOPORdestkeykey[key...]`：对一个或多个 key 求逻辑或，并将结果保存到 destkey
+- `BITOPXORdestkeykey[key...]`：对一个或多个 key 求逻辑异或，并将结果保存到 destkey
+- `BITOPNOTdestkeykey`：对给定 key 求逻辑非，并将结果保存到 destkey
+
+计算出7天都在线的用户：
+
+```shell
+BITOP "AND" "7_days_both_online_users" "day_1_online_users" "day_2_online_users" ...  "day_7_online_users"
+```
+
+
+
+## 购物车
+
+String 或hash。所有String可以做的hash都可以做。
+
+![1586782173682](images/Architecture/20200413205303434.png)
+
+- key：用户id
+- field：商品id
+- value：商品数量
+- +1：hincr
+- -1：hdecr
+- 删除：hdel
+- 全选：hgetall
+- 商品数：hlen
+
+
+
+## 时间线TimeLine
+
+用户消息时间线TimeLine。list双向链表，直接作为timeline就好了。插入有序。Timeline的实现一般有推模式、拉模式、推拉结合这几种。
+
+- 推模式：某人发布内容之后推送给所有粉丝，空间换时间，瓶颈在写入
+- 拉模式：粉丝从自己的关注列表中读取内容，时间换空间，瓶颈在读取
+- 推拉结合：某人发布内容后推送给`活跃粉丝`，不活跃粉丝则使用拉取
+
+目前只讨论推模式，考虑单个feed内容实体存入散列（hashes）、每个用户的timeline列表存入列表（lists）。
+
+
+
+## 消息队列
+
+List提供了两个阻塞的弹出操作：`blpop/brpop`，可以设置超时时间：
+
+- `blpop key1 timeout`：移除并获取列表的第一个元素，如果列表没有元素会阻塞列表直到等待超时或发现可弹出元素为止
+- `brpop key1 timeout` 移除并获取列表的最后一个元素，如果列表没有元素会阻塞列表直到等待超时或发现可弹出元素为止
+
+
+
+## 抽奖
+
+自带一个随机获得值：`spop myset`。
+
+
+
+## 点赞、签到、打卡
+
+![1586782271388](images/Architecture/20200413205334747.png)
+
+
+假如上面的微博ID是`t1001`，用户ID是`u3001`，用 `like:t1001` 来维护 `t1001` 这条微博的所有点赞用户：
+
+- 点赞了这条微博：`sadd like:t1001 u3001`
+- 取消点赞：`srem like:t1001 u3001`
+- 是否点赞：`sismember like:t1001 u3001`
+- 点赞的所有用户：`smembers like:t1001`
+- 点赞数：`scard like:t1001`
+
+
+
+## 商品标签
+
+![1586782231684](images/Architecture/20200413205314496.png)
+
+用 `tags:i5001` 来维护商品所有的标签。
+
+- `sadd tags:i5001 画面清晰细腻`
+- `sadd tags:i5001 真彩清晰显示屏`
+- `sadd tags:i5001 流程至极`
+
+
+
+## 商品筛选
+
+- 获取差集：`sdiff set1 set2`
+- 获取交集（intersection ）：`sinter set1 set2`
+- 获取并集：`sunion set1 set2`
+
+![1586782246941](images/Architecture/20200413205324331.png)
+
+假如：iPhone11 上市了
+
+- `sadd brand:apple iPhone11`
+- `sadd brand:ios iPhone11`
+- `sad screensize:6.0-6.24 iPhone11`
+- `sad screentype:lcd iPhone 11`
+
+筛选商品"苹果的、ios的、屏幕在6.0-6.24之间的，屏幕材质是LCD屏幕"：
+
+- `sinter brand:apple brand:ios screensize:6.0-6.24 screentype:lcd`
+
+
+
+## 用户关注、推荐模型
+
+follow 关注 fans 粉丝
+
+- 相互关注：
+  - sadd 1:follow 2
+  - sadd 2:fans 1
+  - sadd 1:fans 2
+  - sadd 2:follow 1
+- 我关注的人也关注了他(取交集)：
+  - sinter 1:follow 2:fans
+- 可能认识的人：
+  - 用户1可能认识的人(差集)：sdiff 2:follow 1:follow
+  - 用户2可能认识的人：sdiff 1:follow 2:follow
+
+
+
+## 排行榜
+
+id 为6001 的新闻点击数加1：zincrby hotNews:20190926 1 n6001
+
+获取今天点击最多的15条：zrevrange hotNews:20190926 0 15 withscores
+
+![1586782291610](images/Architecture/20200413205344663.png)
