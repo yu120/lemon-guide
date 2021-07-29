@@ -2007,7 +2007,27 @@ https://www.cnblogs.com/skywang12345/category/508186.html
 **代码实现**
 
 ```java
-/** * 冒泡排序 * <p> * 描述：每轮连续比较相邻的两个数，前数大于后数，则进行替换。每轮完成后，本轮最大值已被移至最后 * * @param arr 待排序数组 */public static int[] bubbleSort(int[] arr) {    for (int i = 0; i < arr.length - 1; i++) {        for (int j = 0; j < arr.length - 1 - i; j++) {            // 每次比较2个相邻的数,前一个小于后一个            if (arr[j] > arr[j + 1]) {                int tmp = arr[j];                arr[j] = arr[j + 1];                arr[j + 1] = tmp;            }        }    }        return arr;}
+/**
+  * 冒泡排序
+  * <p>
+  * 描述：每轮连续比较相邻的两个数，前数大于后数，则进行替换。每轮完成后，本轮最大值已被移至最后
+  *
+  * @param arr 待排序数组
+  */
+public static int[] bubbleSort(int[] arr) {
+    for (int i = 0; i < arr.length - 1; i++) {
+        for (int j = 0; j < arr.length - 1 - i; j++) {
+            // 每次比较2个相邻的数,前一个小于后一个
+            if (arr[j] > arr[j + 1]) {
+                int tmp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = tmp;
+            }
+        }
+    }
+    
+    return arr;
+}
 ```
 
 以下是冒泡排序算法复杂度:
@@ -2041,7 +2061,33 @@ n个记录的直接选择排序可经过n-1趟直接选择排序得到有序结�
 **代码实现**
 
 ```java
-/** * 选择排序 * <p> * 描述：每轮选择出最小值，然后依次放置最前面 * * @param arr 待排序数组 */public static int[] selectSort(int[] arr) {    for (int i = 0; i < arr.length - 1; i++) {        // 选最小的记录        int min = i;        for (int j = i + 1; j < arr.length; j++) {            if (arr[min] > arr[j]) {                min = j;            }        }        // 内层循环结束后，即找到本轮循环的最小的数以后，再进行交换：交换a[i]和a[min]        if (min != i) {            int temp = arr[i];            arr[i] = arr[min];            arr[min] = temp;        }    }    return arr;}
+ /**
+     * 选择排序
+     * <p>
+     * 描述：每轮选择出最小值，然后依次放置最前面
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] selectSort(int[] arr) {
+        for (int i = 0; i < arr.length - 1; i++) {
+            // 选最小的记录
+            int min = i;
+            for (int j = i + 1; j < arr.length; j++) {
+                if (arr[min] > arr[j]) {
+                    min = j;
+                }
+            }
+
+            // 内层循环结束后，即找到本轮循环的最小的数以后，再进行交换：交换a[i]和a[min]
+            if (min != i) {
+                int temp = arr[i];
+                arr[i] = arr[min];
+                arr[min] = temp;
+            }
+        }
+
+        return arr;
+    }
 ```
 
 以下是选择排序复杂度:
@@ -2076,7 +2122,76 @@ n个记录的直接选择排序可经过n-1趟直接选择排序得到有序结�
 **代码实现**
 
 ```java
-/** * 直接插入排序 * <p> * 1. 从第一个元素开始，该元素可以认为已经被排序 * 2. 取出下一个元素，在已经排序的元素序列中从后向前扫描 * 3. 如果该元素（已排序）大于新元素，将该元素移到下一位置 * 4. 重复步骤3，直到找到已排序的元素小于或者等于新元素的位置 * 5. 将新元素插入到该位置后 * 6. 重复步骤2~5 * * @param arr 待排序数组 */public static int[] insertionSort(int[] arr) {    for (int i = 1; i < arr.length; i++) {        // 取出下一个元素，在已经排序的元素序列中从后向前扫描        int temp = arr[i];        for (int j = i; j >= 0; j--) {            if (j > 0 && arr[j - 1] > temp) {                // 如果该元素大于取出的元素temp，将该元素移到下一位置                arr[j] = arr[j - 1];            } else {                // 将新元素插入到该位置后                arr[j] = temp;                break;            }        }    }    return arr;}/** * 折半插入排序 * <p> * 往前找合适的插入位置时采用二分查找的方式，即折半插入 * <p> * 交换次数较多的实现 * * @param arr 待排序数组 */public static int[] insertionBinarySort(int[] arr) {    for (int i = 1; i < arr.length; i++) {            if (arr[i] < arr[i - 1]) {                int tmp = arr[i];                // 记录搜索范围的左边界,右边界                int low = 0, high = i - 1;                while (low <= high) {                    // 记录中间位置Index                    int mid = (low + high) / 2;                    // 比较中间位置数据和i处数据大小，以缩小搜索范围                    if (arr[mid] < tmp) {                        // 左边指针则一只中间位置+1                        low = mid + 1;                    } else {                        // 右边指针则一只中间位置-1                        high = mid - 1;                    }                }                // 将low~i处数据整体向后移动1位                for (int j = i; j > low; j--) {                    arr[j] = arr[j - 1];                }                arr[low] = tmp;            }    }    return arr;}
+   /**
+     * 直接插入排序
+     * <p>
+     * 1. 从第一个元素开始，该元素可以认为已经被排序
+     * 2. 取出下一个元素，在已经排序的元素序列中从后向前扫描
+     * 3. 如果该元素（已排序）大于新元素，将该元素移到下一位置
+     * 4. 重复步骤3，直到找到已排序的元素小于或者等于新元素的位置
+     * 5. 将新元素插入到该位置后
+     * 6. 重复步骤2~5
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] insertionSort(int[] arr) {
+        for (int i = 1; i < arr.length; i++) {
+            // 取出下一个元素，在已经排序的元素序列中从后向前扫描
+            int temp = arr[i];
+            for (int j = i; j >= 0; j--) {
+                if (j > 0 && arr[j - 1] > temp) {
+                    // 如果该元素（已排序）大于取出的元素temp，将该元素移到下一位置
+                    arr[j] = arr[j - 1];
+                } else {
+                    // 将新元素插入到该位置后
+                    arr[j] = temp;
+                    break;
+                }
+            }
+        }
+
+        return arr;
+    }
+
+    /**
+     * 折半插入排序
+     * <p>
+     * 往前找合适的插入位置时采用二分查找的方式，即折半插入
+     * <p>
+     * 交换次数较多的实现
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] insertionBinarySort(int[] arr) {
+        for (int i = 1; i < arr.length; i++) {
+            if (arr[i] < arr[i - 1]) {
+                int tmp = arr[i];
+
+                // 记录搜索范围的左边界,右边界
+                int low = 0, high = i - 1;
+                while (low <= high) {
+                    // 记录中间位置Index
+                    int mid = (low + high) / 2;
+                    // 比较中间位置数据和i处数据大小，以缩小搜索范围
+                    if (arr[mid] < tmp) {
+                        // 左边指针则一只中间位置+1
+                        low = mid + 1;
+                    } else {
+                        // 右边指针则一只中间位置-1
+                        high = mid - 1;
+                    }
+                }
+
+                // 将low~i处数据整体向后移动1位
+                for (int j = i; j > low; j--) {
+                    arr[j] = arr[j - 1];
+                }
+                arr[low] = tmp;
+            }
+        }
+
+        return arr;
+    }
 ```
 
 插入排序复杂度：
@@ -2106,7 +2221,35 @@ Tips：由于直接插入排序每次只移动一个元素的位， 并不会改
 **代码实现**
 
 ```java
-/** * 希尔排序 * <p> * 1. 选择一个增量序列t1，t2，…，tk，其中ti>tj，tk=1；（一般初次取数组半长，之后每次再减半，直到增量为1） * 2. 按增量序列个数k，对序列进行k 趟排序； * 3. 每趟排序，根据对应的增量ti，将待排序列分割成若干长度为m 的子序列，分别对各子表进行直接插入排序。 * 仅增量因子为1 时，整个序列作为一个表来处理，表长度即为整个序列的长度。 * * @param arr 待排序数组 */public static int[] shellSort(int[] arr) {    int gap = arr.length / 2;    // 不断缩小gap，直到1为止    for (; gap > 0; gap /= 2) {        // 使用当前gap进行组内插入排序        for (int j = 0; (j + gap) < arr.length; j++) {            for (int k = 0; (k + gap) < arr.length; k += gap) {                if (arr[k] > arr[k + gap]) {                    int temp = arr[k + gap];                    arr[k + gap] = arr[k];                    arr[k] = temp;                }            }        }    }    return arr;}
+ /**
+     * 希尔排序
+     * <p>
+     * 1. 选择一个增量序列t1，t2，…，tk，其中ti>tj，tk=1；（一般初次取数组半长，之后每次再减半，直到增量为1）
+     * 2. 按增量序列个数k，对序列进行k 趟排序；
+     * 3. 每趟排序，根据对应的增量ti，将待排序列分割成若干长度为m 的子序列，分别对各子表进行直接插入排序。
+     * 仅增量因子为1 时，整个序列作为一个表来处理，表长度即为整个序列的长度。
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] shellSort(int[] arr) {
+        int gap = arr.length / 2;
+
+        // 不断缩小gap，直到1为止
+        for (; gap > 0; gap /= 2) {
+            // 使用当前gap进行组内插入排序
+            for (int j = 0; (j + gap) < arr.length; j++) {
+                for (int k = 0; (k + gap) < arr.length; k += gap) {
+                    if (arr[k] > arr[k + gap]) {
+                        int temp = arr[k + gap];
+                        arr[k + gap] = arr[k];
+                        arr[k] = temp;
+                    }
+                }
+            }
+        }
+
+        return arr;
+    }
 ```
 
 以下是希尔排序复杂度:
@@ -2146,7 +2289,61 @@ Tips：希尔排序的核心在于间隔序列的设定。既可以提前设定�
 **代码实现**
 
 ```java
-/** * 归并排序（递归） * <p> * ①. 将序列每相邻两个数字进行归并操作，形成 floor(n/2)个序列，排序后每个序列包含两个元素； * ②. 将上述序列再次归并，形成 floor(n/4)个序列，每个序列包含四个元素； * ③. 重复步骤②，直到所有元素排序完毕。 * * @param arr 待排序数组 */public static int[] mergeSort(int[] arr) {    return mergeSort(arr, 0, arr.length - 1);}private static int[] mergeSort(int[] arr, int low, int high) {    int center = (high + low) / 2;    if (low < high) {        // 递归，直到low==high，也就是数组已不能再分了，        mergeSort(arr, low, center);        mergeSort(arr, center + 1, high);        // 当数组不能再分，开始归并排序        mergeSort(arr, low, center, high);    }    return arr;}private static void mergeSort(int[] a, int low, int mid, int high) {    int[] temp = new int[high - low + 1];    int i = low, j = mid + 1, k = 0;    // 把较小的数先移到新数组中    while (i <= mid && j <= high) {        if (a[i] < a[j]) {            temp[k++] = a[i++];        } else {            temp[k++] = a[j++];        }    }    // 把左边剩余的数移入数组    while (i <= mid) {        temp[k++] = a[i++];    }    // 把右边边剩余的数移入数组    while (j <= high) {        temp[k++] = a[j++];    }    // 把新数组中的数覆盖nums数组    for (int x = 0; x < temp.length; x++) {        a[x + low] = temp[x];    }}
+/**
+     * 归并排序（递归）
+     * <p>
+     * ①. 将序列每相邻两个数字进行归并操作，形成 floor(n/2)个序列，排序后每个序列包含两个元素；
+     * ②. 将上述序列再次归并，形成 floor(n/4)个序列，每个序列包含四个元素；
+     * ③. 重复步骤②，直到所有元素排序完毕。
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] mergeSort(int[] arr) {
+        return mergeSort(arr, 0, arr.length - 1);
+    }
+
+    private static int[] mergeSort(int[] arr, int low, int high) {
+        int center = (high + low) / 2;
+        if (low < high) {
+            // 递归，直到low==high，也就是数组已不能再分了，
+            mergeSort(arr, low, center);
+            mergeSort(arr, center + 1, high);
+
+            // 当数组不能再分，开始归并排序
+            mergeSort(arr, low, center, high);
+        }
+
+        return arr;
+    }
+
+    private static void mergeSort(int[] a, int low, int mid, int high) {
+        int[] temp = new int[high - low + 1];
+        int i = low, j = mid + 1, k = 0;
+
+        // 把较小的数先移到新数组中
+        while (i <= mid && j <= high) {
+            if (a[i] < a[j]) {
+                temp[k++] = a[i++];
+            } else {
+                temp[k++] = a[j++];
+            }
+        }
+
+        // 把左边剩余的数移入数组
+        while (i <= mid) {
+            temp[k++] = a[i++];
+        }
+
+        // 把右边边剩余的数移入数组
+        while (j <= high) {
+            temp[k++] = a[j++];
+        }
+
+        // 把新数组中的数覆盖nums数组
+        for (int x = 0; x < temp.length; x++) {
+            a[x + low] = temp[x];
+        }
+    }
 ```
 
 以下是归并排序算法复杂度:
@@ -2178,7 +2375,110 @@ Tips：和选择排序一样，归并排序的性能不受输入数据的影响�
 **代码实现**
 
 ```java
-/** * 快速排序（递归） * <p> * ①. 从数列中挑出一个元素，称为"基准"（pivot）。 * ②. 重新排序数列，所有比基准值小的元素摆放在基准前面，所有比基准值大的元素摆在基准后面（相同的数可以到任一边）。在这个分区结束之后，该基准就处于数列的中间位置。这个称为分区（partition）操作。 * ③. 递归地（recursively）把小于基准值元素的子数列和大于基准值元素的子数列排序。 * * @param arr 待排序数组 */public static int[] quickSort(int[] arr) {    return quickSort(arr, 0, arr.length - 1);}private static int[] quickSort(int[] arr, int low, int high) {    if (arr.length <= 0 || low >= high) {        return arr;    }    int left = low;    int right = high;    // 挖坑1：保存基准的值    int temp = arr[left];    while (left < right) {        // 坑2：从后向前找到比基准小的元素，插入到基准位置坑1中        while (left < right && arr[right] >= temp) {            right--;        }        arr[left] = arr[right];        // 坑3：从前往后找到比基准大的元素，放到刚才挖的坑2中        while (left < right && arr[left] <= temp) {            left++;        }        arr[right] = arr[left];    }    // 基准值填补到坑3中，准备分治递归快排    arr[left] = temp;    quickSort(arr, low, left - 1);    quickSort(arr, left + 1, high);    return arr;}/** * 快速排序（非递归） * <p> * ①. 从数列中挑出一个元素，称为"基准"（pivot）。 * ②. 重新排序数列，所有比基准值小的元素摆放在基准前面，所有比基准值大的元素摆在基准后面（相同的数可以到任一边）。在这个分区结束之后，该基准就处于数列的中间位置。这个称为分区（partition）操作。 * ③. 把分区之后两个区间的边界（low和high）压入栈保存，并循环①、②步骤 * * @param arr 待排序数组 */public static int[] quickSortByStack(int[] arr) {    Stack<Integer> stack = new Stack<>();    // 初始状态的左右指针入栈    stack.push(0);    stack.push(arr.length - 1);    while (!stack.isEmpty()) {        // 出栈进行划分        int high = stack.pop();        int low = stack.pop();        int pivotIdx = partition(arr, low, high);        // 保存中间变量        if (pivotIdx > low) {            stack.push(low);            stack.push(pivotIdx - 1);        }        if (pivotIdx < high && pivotIdx >= 0) {            stack.push(pivotIdx + 1);            stack.push(high);        }    }    return arr;}private static int partition(int[] arr, int low, int high) {    if (arr.length <= 0) return -1;    if (low >= high) return -1;    int l = low;    int r = high;    // 挖坑1：保存基准的值    int pivot = arr[l];    while (l < r) {        // 坑2：从后向前找到比基准小的元素，插入到基准位置坑1中        while (l < r && arr[r] >= pivot) {            r--;        }        arr[l] = arr[r];        // 坑3：从前往后找到比基准大的元素，放到刚才挖的坑2中        while (l < r && arr[l] <= pivot) {            l++;        }        arr[r] = arr[l];    }    // 基准值填补到坑3中，准备分治递归快排    arr[l] = pivot;    return l;}
+/**
+     * 快速排序（递归）
+     * <p>
+     * ①. 从数列中挑出一个元素，称为"基准"（pivot）。
+     * ②. 重新排序数列，所有比基准值小的元素摆放在基准前面，所有比基准值大的元素摆在基准后面（相同的数可以到任一边）。在这个分区结束之后，该基准就处于数列的中间位置。这个称为分区（partition）操作。
+     * ③. 递归地（recursively）把小于基准值元素的子数列和大于基准值元素的子数列排序。
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] quickSort(int[] arr) {
+        return quickSort(arr, 0, arr.length - 1);
+    }
+
+    private static int[] quickSort(int[] arr, int low, int high) {
+        if (arr.length <= 0 || low >= high) {
+            return arr;
+        }
+
+        int left = low;
+        int right = high;
+
+        // 挖坑1：保存基准的值
+        int temp = arr[left];
+        while (left < right) {
+            // 坑2：从后向前找到比基准小的元素，插入到基准位置坑1中
+            while (left < right && arr[right] >= temp) {
+                right--;
+            }
+            arr[left] = arr[right];
+            // 坑3：从前往后找到比基准大的元素，放到刚才挖的坑2中
+            while (left < right && arr[left] <= temp) {
+                left++;
+            }
+            arr[right] = arr[left];
+        }
+        // 基准值填补到坑3中，准备分治递归快排
+        arr[left] = temp;
+        quickSort(arr, low, left - 1);
+        quickSort(arr, left + 1, high);
+
+        return arr;
+    }
+
+    /**
+     * 快速排序（非递归）
+     * <p>
+     * ①. 从数列中挑出一个元素，称为"基准"（pivot）。
+     * ②. 重新排序数列，所有比基准值小的元素摆放在基准前面，所有比基准值大的元素摆在基准后面（相同的数可以到任一边）。在这个分区结束之后，该基准就处于数列的中间位置。这个称为分区（partition）操作。
+     * ③. 把分区之后两个区间的边界（low和high）压入栈保存，并循环①、②步骤
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] quickSortByStack(int[] arr) {
+        Stack<Integer> stack = new Stack<>();
+
+        // 初始状态的左右指针入栈
+        stack.push(0);
+        stack.push(arr.length - 1);
+        while (!stack.isEmpty()) {
+            // 出栈进行划分
+            int high = stack.pop();
+            int low = stack.pop();
+
+            int pivotIdx = partition(arr, low, high);
+
+            // 保存中间变量
+            if (pivotIdx > low) {
+                stack.push(low);
+                stack.push(pivotIdx - 1);
+            }
+            if (pivotIdx < high && pivotIdx >= 0) {
+                stack.push(pivotIdx + 1);
+                stack.push(high);
+            }
+        }
+
+        return arr;
+    }
+
+    private static int partition(int[] arr, int low, int high) {
+        if (arr.length <= 0) return -1;
+        if (low >= high) return -1;
+        int l = low;
+        int r = high;
+
+        // 挖坑1：保存基准的值
+        int pivot = arr[l];
+        while (l < r) {
+            // 坑2：从后向前找到比基准小的元素，插入到基准位置坑1中
+            while (l < r && arr[r] >= pivot) {
+                r--;
+            }
+            arr[l] = arr[r];
+            // 坑3：从前往后找到比基准大的元素，放到刚才挖的坑2中
+            while (l < r && arr[l] <= pivot) {
+                l++;
+            }
+            arr[r] = arr[l];
+        }
+
+        // 基准值填补到坑3中，准备分治递归快排
+        arr[l] = pivot;
+        return l;
+    }
 ```
 
 以下是快速排序算法复杂度:
@@ -2295,7 +2595,63 @@ Tips: 基数排序不改变相同元素之间的相对顺序，因此它是稳�
 **代码实现**
 
 ```java
-/** * 堆排序算法 * * @param arr 待排序数组 */public static int[] heapSort(int[] arr) {    // 将无序序列构建成一个堆，根据升序降序需求选择大顶堆或小顶堆    for (int i = arr.length / 2 - 1; i >= 0; i--) {        adjustHeap(arr, i, arr.length);    }    // 将最大的节点放在堆尾，然后从根节点重新调整    for (int j = arr.length - 1; j > 0; j--) {        // 交换        int temp = arr[j];        arr[j] = arr[0];        arr[0] = temp;        // 完成将以i对应的非叶子结点的树调整成大顶堆        adjustHeap(arr, 0, j);    }    return arr;}/** * 功能： 完成将以i对应的非叶子结点的树调整成大顶堆 * * @param arr    待排序数组 * @param i      表示非叶子结点在数组中索引 * @param length 表示对多少个元素继续调整， length 是在逐渐的减少 */private static void adjustHeap(int[] arr, int i, int length) {    // 先取出当前元素的值，保存在临时变量    int temp = arr[i];    //开始调整。说明：1. k = i * 2 + 1 k 是 i结点的左子结点    for (int k = i * 2 + 1; k < length; k = k * 2 + 1) {        // 说明左子结点的值小于右子结点的值        if (k + 1 < length && arr[k] < arr[k + 1]) {            // k 指向右子结点            k++;        }        // 如果子结点大于父结点        if (arr[k] > temp) {            // 把较大的值赋给当前结点            arr[i] = arr[k];            // i 指向 k,继续循环比较            i = k;        } else {            break;        }    }    //当for 循环结束后，我们已经将以i 为父结点的树的最大值，放在了 最顶(局部)。将temp值放到调整后的位置    arr[i] = temp;}
+/**
+     * 堆排序算法
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] heapSort(int[] arr) {
+        // 将无序序列构建成一个堆，根据升序降序需求选择大顶堆或小顶堆
+        for (int i = arr.length / 2 - 1; i >= 0; i--) {
+            adjustHeap(arr, i, arr.length);
+        }
+
+        // 将最大的节点放在堆尾，然后从根节点重新调整
+        for (int j = arr.length - 1; j > 0; j--) {
+            // 交换
+            int temp = arr[j];
+            arr[j] = arr[0];
+            arr[0] = temp;
+
+            // 完成将以i对应的非叶子结点的树调整成大顶堆
+            adjustHeap(arr, 0, j);
+        }
+
+        return arr;
+    }
+
+    /**
+     * 功能： 完成将以i对应的非叶子结点的树调整成大顶堆
+     *
+     * @param arr    待排序数组
+     * @param i      表示非叶子结点在数组中索引
+     * @param length 表示对多少个元素继续调整， length 是在逐渐的减少
+     */
+    private static void adjustHeap(int[] arr, int i, int length) {
+        // 先取出当前元素的值，保存在临时变量
+        int temp = arr[i];
+        //开始调整。说明：1. k = i * 2 + 1 k 是 i结点的左子结点
+        for (int k = i * 2 + 1; k < length; k = k * 2 + 1) {
+            // 说明左子结点的值小于右子结点的值
+            if (k + 1 < length && arr[k] < arr[k + 1]) {
+                // k 指向右子结点
+                k++;
+            }
+
+            // 如果子结点大于父结点
+            if (arr[k] > temp) {
+                // 把较大的值赋给当前结点
+                arr[i] = arr[k];
+                // i 指向 k,继续循环比较
+                i = k;
+            } else {
+                break;
+            }
+        }
+
+        //当for 循环结束后，我们已经将以i 为父结点的树的最大值，放在了 最顶(局部)。将temp值放到调整后的位置
+        arr[i] = temp;
+    }
 ```
 
 | 平均时间复杂度 | 最好情况       | 最坏情况       | 空间复杂度 |
@@ -2324,7 +2680,48 @@ Tips: **由于堆排序中初始化堆的过程比较次数较多, 因此它不�
 **代码实现**
 
 ```java
-/** * 计数排序算法 * * @param arr 待排序数组 */public static int[] countingSort(int[] arr) {    // 得到数列的最大值与最小值，并算出差值d    int max = arr[0];    int min = arr[0];    for (int i = 1; i < arr.length; i++) {        if (arr[i] > max) {            max = arr[i];        }        if (arr[i] < min) {            min = arr[i];        }    }    int d = max - min;    // 创建统计数组并计算统计对应元素个数    int[] countArray = new int[d + 1];    for (int value : arr) {        countArray[value - min]++;    }    // 统计数组变形，后面的元素等于前面的元素之和    int sum = 0;    for (int i = 0; i < countArray.length; i++) {        sum += countArray[i];        countArray[i] = sum;    }    // 倒序遍历原始数组，从统计数组找到正确位置，输出到结果数组    int[] sortedArray = new int[arr.length];    for (int i = arr.length - 1; i >= 0; i--) {        sortedArray[countArray[arr[i] - min] - 1] = arr[i];        countArray[arr[i] - min]--;    }    return sortedArray;}
+/**
+     * 计数排序算法
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] countingSort(int[] arr) {
+        // 得到数列的最大值与最小值，并算出差值d
+        int max = arr[0];
+        int min = arr[0];
+        for (int i = 1; i < arr.length; i++) {
+            if (arr[i] > max) {
+                max = arr[i];
+            }
+            if (arr[i] < min) {
+                min = arr[i];
+            }
+        }
+        int d = max - min;
+
+        // 创建统计数组并计算统计对应元素个数
+        int[] countArray = new int[d + 1];
+        for (int value : arr) {
+            countArray[value - min]++;
+        }
+
+        // 统计数组变形，后面的元素等于前面的元素之和
+        int sum = 0;
+        for (int i = 0; i < countArray.length; i++) {
+            sum += countArray[i];
+            countArray[i] = sum;
+        }
+
+        // 倒序遍历原始数组，从统计数组找到正确位置，输出到结果数组
+        int[] sortedArray = new int[arr.length];
+        for (int i = arr.length - 1; i >= 0; i--) {
+            sortedArray[countArray[arr[i] - min] - 1] = arr[i];
+            countArray[arr[i] - min]--;
+        }
+
+        return sortedArray;
+    }
+
 ```
 
 **算法分析**
@@ -2351,7 +2748,48 @@ Tips: **由于堆排序中初始化堆的过程比较次数较多, 因此它不�
 **代码实现**
 
 ```java
-/** * 桶排序算法 * * @param arr 待排序数组 */public static int[] bucketSort(int[] arr) {    // 计算最大值与最小值    int max = Integer.MIN_VALUE;    int min = Integer.MAX_VALUE;    for (int value : arr) {        max = Math.max(max, value);        min = Math.min(min, value);    }    // 计算桶的数量    int bucketNum = (max - min) / arr.length + 1;    List<List<Integer>> bucketArr = new ArrayList<>(bucketNum);    for (int i = 0; i < bucketNum; i++) {        bucketArr.add(new ArrayList<>());    }    // 将每个元素放入桶    for (int value : arr) {        int num = (value - min) / (arr.length);        bucketArr.get(num).add(value);    }    // 对每个桶进行排序    for (List<Integer> integers : bucketArr) {        Collections.sort(integers);    }    // 将桶中的元素赋值到原序列    int index = 0;    for (List<Integer> integers : bucketArr) {        for (Integer integer : integers) {            arr[index++] = integer;        }    }    return arr;}
+/**
+     * 桶排序算法
+     *
+     * @param arr 待排序数组
+     */
+    public static int[] bucketSort(int[] arr) {
+        // 计算最大值与最小值
+        int max = Integer.MIN_VALUE;
+        int min = Integer.MAX_VALUE;
+        for (int value : arr) {
+            max = Math.max(max, value);
+            min = Math.min(min, value);
+        }
+
+        // 计算桶的数量
+        int bucketNum = (max - min) / arr.length + 1;
+        List<List<Integer>> bucketArr = new ArrayList<>(bucketNum);
+        for (int i = 0; i < bucketNum; i++) {
+            bucketArr.add(new ArrayList<>());
+        }
+
+        // 将每个元素放入桶
+        for (int value : arr) {
+            int num = (value - min) / (arr.length);
+            bucketArr.get(num).add(value);
+        }
+
+        // 对每个桶进行排序
+        for (List<Integer> integers : bucketArr) {
+            Collections.sort(integers);
+        }
+
+        // 将桶中的元素赋值到原序列
+        int index = 0;
+        for (List<Integer> integers : bucketArr) {
+            for (Integer integer : integers) {
+                arr[index++] = integer;
+            }
+        }
+
+        return arr;
+    }
 ```
 
 **算法分析**
