@@ -1373,6 +1373,475 @@ CMS垃圾收集器JVM参数最佳实践：
   - JNI 调用需要谨慎，不一定可以提升性能，反而可能造成 GC 问题
   - 升级 JDK 版本到 14，避免 [JDK-8048556](https://bugs.openjdk.java.net/browse/JDK-8048556) 导致的重复 GC
 
+
+
+# JVM性能调优
+
+## 磁盘不足排查
+
+其实，磁盘不足排查算是系统、程序层面的问题排查，并不算是JVM，但是另一方面考虑过来就是，系统磁盘的不足，也会导致JVM的运行异常，所以也把磁盘不足算进来了。并且排查磁盘不足，是比较简单，就是几个命令，然后就是逐层的排查，首先第一个命令就是**df -h**，查询磁盘的状态：
+
+![JVM-磁盘不足排查](images/JVM/JVM-磁盘不足排查.jpg) 
+
+从上面的显示中其中第一行使用的2.8G最大，然后是挂载在 **/** 目录下，我们直接**cd /**。然后通过执行：
+
+```shell
+du -sh *
+```
+
+查看各个文件的大小，找到其中最大的，或者说存储量级差不多的并且都非常大的文件，把那些没用的大文件删除就好。
+
+![JVM-磁盘不足排查-du-sh](images/JVM/JVM-磁盘不足排查-du-sh.jpg) 
+
+然后，就是直接cd到对应的目录也是执行：du -sh *，就这样一层一层的执行，找到对应的没用的，然后文件又比较大的，可以直接删除。
+
+
+
+## CPU过高排查
+
+然后就是排查CPU的飙高的原因，**CPU飙高的排查都是直接找到对应CPU占比最高的进程，然后找到CPU最高的线程**。
+
+总结一下可能导致CPU标高的原因，可能是**一个GC线程频繁或者锁资源竞争频繁，线程数过多**等原因。
+
+- **GC线程频繁**
+- **锁竞争频繁（自旋）**
+
+其中GC线程频繁，有可能是**大对象（对象过多），内存泄漏**等原因导致内存紧张一直在执行GC，但是每次执行的GC回收的垃圾都非常少。
+
+一般CPU紧张，都是线上实施排查，并且一般大厂都会有自己自研的监控平台，我们自己的监控平台，对于我们每台服务器的健康状况（健康分）、服务期内的应用（Mysql、Redis、Mq、Kafka、服务）都会进行实施的监控报警，所以一般都能都在出现问题前将问题解决掉。
+
+在线上之间也提到过可以使用**top**、**jstack**命令排查CPU飙高的问题。这里有一段案例代码如下：
+
+```java
+public class CPUSoaring {
+        public static void main(String[] args) {
+
+                Thread thread1 = new Thread(new Runnable(){
+                        @Override
+                        public void run() {
+                                for (;;){
+                                      System.out.println("I am children-thread1");
+                                }
+                        }
+                },"children-thread1");
+                
+                 Thread thread2 = new Thread(new Runnable(){
+                        @Override
+                        public void run() {
+                                for (;;){
+                                      System.out.println("I am children-thread2");
+                                }
+                        }
+                },"children-thread2");
+                
+                thread1.start();
+                thread2.start();
+                System.err.println("I am is main thread!!!!!!!!");
+        }
+}
+```
+
+（1）首先通过**top**命令可以查看到id为**3806**的进程所占的CPU最高：
+
+![CPU过高排查-top](images/JVM/CPU过高排查-top.jpg)
+
+（2）然后通过**top -Hp pid**命令，找到占用CPU最高的线程：
+
+![CPU过高排查-top-Hp-pid](images/JVM/CPU过高排查-top-Hp-pid.jpg)
+
+（3）接着通过：**printf '%x\n' tid**命令将线程的tid转换为十六进制：xid：
+
+![CPU过高排查-printf](images/JVM/CPU过高排查-printf.jpg)
+
+（4）最后通过：**jstack pid|grep xid -A 30**命令就是输出线程的堆栈信息，线程所在的位置：
+
+![CPU过高排查-jstack](images/JVM/CPU过高排查-jstack.jpg)
+
+（5）还可以通过**jstack -l pid > 文件名称.txt** 命令将线程堆栈信息输出到文件，线下查看。
+
+这就是一个CPU飙高的排查过程，目的就是要**找到占用CPU最高的线程所在的位置**，然后就是**review**你的代码，定位到问题的所在。使用Arthas的工具排查也是一样的，首先要使用top命令找到占用CPU最高的Java进程，然后使用Arthas进入该进程内，**使用dashboard命令排查占用CPU最高的线程。**，最后通过**thread**命令线程的信息。
+
+
+
+## OOM异常排查
+
+OOM的异常排查也比较简单，首先服务上线的时候，要先设置这两个参数：
+
+```shell
+-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${目录}
+```
+
+指定项目出现OOM异常的时候自动导出堆转储文件，然后通过内存分析工具（**Visual VM**）来进行线下的分析。
+
+首先我们来聊一聊，哪些原因会导致OOM异常，站在JVM的分区的角度：
+
+- **Java堆**
+- **方法区**
+- **虚拟机栈**
+- **本地方法栈**
+- **程序计数器**
+- **直接内存**
+
+只有**程序计数器**区域不会出现OOM，在Java 8及以上的**元空间**（本地内存）都会出现OOM。
+
+而站在程序代码的角度来看，总结了大概有以下几点原因会导致OOM异常：
+
+- **内存泄露**
+- **对象过大、过多**
+- **方法过长**
+- **过度使用代理框架，生成大量的类信息**
+
+接下来我们屋来看看OOM的排查，出现OOM异常后dump出了堆转储文件，然后打开jdk自带的Visual VM工具，导入堆转储文件，首先我使用的OOM异常代码如下：
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+
+class OOM {
+
+        static class User{
+                private String name;
+                private int age;
+
+                public User(String name, int age){
+                        this.name = name;
+                        this.age = age;
+                }
+        }
+
+        public static void main(String[] args) throws InterruptedException {
+                List<User> list = new ArrayList<>();
+                for (int i = 0; i < Integer.MAX_VALUE; i++) {
+                        Thread.sleep(1000);
+                        User user = new User("zhangsan"+i,i);
+                        list.add(user);
+                }
+        }
+
+}
+```
+
+代码很简单，就是往集合里面不断地add对象，带入堆转储文件后，在类和实例那栏就可以看到实例最多的类：
+
+![OOM异常排查-查看实例最多的类](images/JVM/OOM异常排查-查看实例最多的类.jpg)
+
+这样就找到导致OOM异常的类，还可以通过下面的方法查看导致OOM异常的线程堆栈信息，找到对应异常的代码段。
+
+![OOM异常排查-查看异常代码](images/JVM/OOM异常排查-查看异常代码.jpg)
+
+![OOM异常排查-查看异常代码堆栈](images/JVM/OOM异常排查-查看异常代码堆栈.jpg)
+
+上面的方法是排查已经出现了OOM异常的方法，肯定是防线的最后一步，那么在此之前怎么防止出现OOM异常呢？
+
+一般大厂都会有自己的监控平台，能够实施的**监控测试环境、预览环境、线上实施的服务健康状况（CPU、内存）** 等信息，对于频繁GC，并且GC后内存的回收率很差的，就要引起我们的注意了。
+
+因为一般方法的长度合理，95%以上的对象都是朝生夕死，在**Minor GC**后只剩少量的存活对象，所以在代码层面上应该避免**方法过长、大对象**的现象。
+
+每次自己写完代码，自己检查后，都可以提交给比自己高级别的工程师**review**自己的代码，就能及时的发现代码的问题，基本上代码没问题，百分之九十以上的问题都能避免，这也是大厂注重代码质量，并且时刻**review**代码的习惯。
+
+
+
+## 栈溢出
+
+栈溢出异常的排查（包括**虚拟机栈、本地方法栈**）基本和OOM的一场排查是一样的，导出异常的堆栈信息，然后使用mat或者Visual VM工具进行线下分析，找到出现异常的代码或者方法。
+
+当线程请求的栈深度大于虚拟机栈所允许的大小时，就会出现**StackOverflowError**异常，二从代码的角度来看，导致线程请求的深度过大的原因可能有：**方法栈中对象过大，或者过多，方法过长从而导致局部变量表过大，超过了-Xss参数的设置**。
+
+
+
+## 死锁排查
+
+死锁的案例演示的代码如下：
+
+```java
+public class DeadLock {
+
+	public static Object lock1 = new Object();
+	public static Object lock2 = new Object();
+
+	public static void main(String[] args){
+		Thread a = new Thread(new Lock1(),"DeadLock1");
+		Thread b = new Thread(new Lock2(),"DeadLock2");
+		a.start();
+		b.start();
+	}
+}
+class Lock1 implements Runnable{
+	@Override
+	public void run(){
+		try{
+			while(true){
+				synchronized(DeadLock.lock1){
+					System.out.println("Waiting for lock2");
+					Thread.sleep(3000);
+					synchronized(DeadLock.lock2){
+						System.out.println("Lock1 acquired lock1 and lock2 ");
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+}
+class Lock2 implements Runnable{
+	@Override
+	public void run(){
+		try{
+			while(true){
+				synchronized(DeadLock.lock2){
+					System.out.println("Waiting for lock1");
+					Thread.sleep(3000);
+					synchronized(DeadLock.lock1){
+						System.out.println("Lock2 acquired lock1 and lock2");
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+}
+```
+
+上面的代码非常的简单，就是两个类的实例作为锁资源，然后分别开启两个线程，不同顺序的对锁资源资源进行加锁，并且获取一个锁资源后，等待三秒，是为了让另一个线程有足够的时间获取另一个锁对象。
+
+运行上面的代码后，就会陷入死锁的僵局：
+
+![死锁排查-死锁运行结果示例](images/JVM/死锁排查-死锁运行结果示例.jpg)
+
+对于死锁的排查，若是在测试环境或者本地，直接就可以使用Visual VM连接到该进程，如下界面就会自动检测到死锁的存在
+
+![死锁排查-检测死锁](images/JVM/死锁排查-检测死锁.jpg)
+
+并且查看线程的堆栈信息。就能看到具体的死锁的线程：
+
+![死锁排查-查看线程堆栈信息](images/JVM/死锁排查-查看线程堆栈信息.jpg)
+
+线上的话可以上用Arthas也可以使用原始的命令进行排查，原始命令可以先使用**jps**查看具体的Java进程的ID，然后再通过**jstack ID**查看进程的线程堆栈信息，他也会自动给你提示有死锁的存在：
+
+![死锁排查-jstack查看线程堆栈](images/JVM/死锁排查-jstack查看线程堆栈.jpg)
+
+Arthas工具可以使用**thread**命令排查死锁，要关注的是**BLOCKED**状态的线程，如下图所示：
+
+![死锁排查-Arthas查看死锁](images/JVM/死锁排查-Arthas查看死锁.jpg)
+
+具体thread的详细参数可以参考如下图所示：
+
+![死锁排查-Thread详细参数](images/JVM/死锁排查-Thread详细参数.jpg)
+
+
+
+**如何避免死锁**
+
+上面我们聊了如何排查死锁，下面我们来聊一聊如何避免死锁的发生，从上面的案例中可以发现，死锁的发生两个线程同时都持有对方不释放的资源进入僵局。所以，在代码层面，要避免死锁的发生，主要可以从下面的四个方面进行入手：
+
+- **首先避免线程的对于资源的加锁顺序要保持一致**
+
+- **并且要避免同一个线程对多个资源进行资源的争抢**
+
+- **另外的话，对于已经获取到的锁资源，尽量设置失效时间，避免异常，没有释放锁资源，可以使用acquire() 方法加锁时可指定 timeout 参数**
+
+- **最后，就是使用第三方的工具检测死锁，预防线上死锁的发生**
+
+死锁的排查已经说完了，上面的基本就是问题的排查，也可以算是调优的一部分吧，但是对于JVM调优来说，重头戏应该是在**Java堆**，这部分的调优才是重中之重。
+
+
+
+## 调优实战
+
+上面说完了调优的目的和调优的指标，那么我们就来实战调优，首先准备我的案例代码，如下：
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+
+class OOM {
+
+	static class User{
+		private String name;
+		private int age;
+
+		public User(String name, int age){
+			this.name = name;
+			this.age = age;
+		}
+
+	}
+
+	public static void main(String[] args) throws InterruptedException {
+		List<User> list = new ArrayList<>();
+		for (int i = 0; i < Integer.MAX_VALUE; i++) {
+		     Tread.sleep(1000);
+			System.err.println(Thread.currentThread().getName());
+			User user = new User("zhangsan"+i,i);
+			list.add(user);
+		}
+	}
+}
+```
+
+案例代码很简单，就是不断的往一个集合里里面添加对象，首先初次我们启动的命令为：
+
+```shell
+java   -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+UseGCLogFileRotation -XX:+PrintHeapAtGC -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=50M -Xloggc:./logs/emps-gc-%t.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./logs/emps-heap.dump OOM
+```
+
+就是纯粹的设置了一些GC的打印日志，然后通过Visual VM来看GC的显示如下：
+
+![调优实战-VisualVM查看GC显示](images/JVM/调优实战-VisualVM查看GC显示.jpg)
+
+可以看到一段时间后出现4次Minor GC，使用的时间是29.648ms，发生一次Full GC使用的时间是41.944ms。
+
+Minor GC非常频繁，Full GC也是，在短时间内就发生了几次，观察输出的日志发现以及Visual VM的显示来看，都是因为内存没有设置，太小，导致Minor GC频繁。
+
+因此，我们第二次适当的增大Java堆的大小，调优设置的参数为：
+
+```shell
+java -Xmx2048m -Xms2048m -Xmn1024m -Xss256k  -XX:+UseConcMarkSweepGC  -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+UseGCLogFileRotation -XX:+PrintHeapAtGC -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=50M -Xloggc:./logs/emps-gc-%t.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./logs/emps-heap.dump OOM
+```
+
+观察一段时间后，结果如下图所示：
+
+![调优实战-一段时间后VisualVM查看GC显示](images/JVM/调优实战-一段时间后VisualVM查看GC显示.jpg)
+
+可以发现Minor GC次数明显下降，但是还是发生了Full GC，根据打印的日志来看，是因为元空间的内存不足，看了上面的Visual VM元空间的内存图，也是一样，基本都到顶了：
+
+![调优实战-元空间不足](images/JVM/调优实战-元空间不足.jpg)
+
+因此第三次对于元空间的区域设置大一些，并且将GC回收器换成是CMS的，设置的参数如下：
+
+```shell
+java -Xmx2048m -Xms2048m -Xmn1024m -Xss256k -XX:MetaspaceSize=100m -XX:MaxMetaspaceSize=100m -XX:+UseConcMarkSweepGC  -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+UseGCLogFileRotation -XX:+PrintHeapAtGC -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=50M -Xloggc:./logs/emps-gc-%t.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./logs/emps-heap.dump OOM
+```
+
+观察相同的时间后，Visual VM的显示图如下：
+
+![调优实战-元空间调后后VisualVM查看GC显示](images/JVM/调优实战-元空间调后后VisualVM查看GC显示.jpg)
+
+同样的时间，一次Minor GC和Full GC都没有发生，所以这样我觉得也算是已经调优了。
+
+但是调优并不是一味的调大内存，是要在各个区域之间取得平衡，可以适当的调大内存，以及更换GC种类，举个例子，当把上面的案例代码的Thread.sleep(1000)给去掉。
+
+然后再来看Visual VM的图，如下：
+
+![调优实战-去掉线程休眠VisualVM显示](images/JVM/调优实战-去掉线程休眠VisualVM显示.jpg)
+
+可以看到Minor GC也是非常频繁的，因为这段代码本身就是不断的增大内存，直到OOM异常，真正的实际并不会这样，可能当内存增大到一定两级后，就会在一段范围平衡。
+
+当我们将上面的情况，再适当的增大内存，JVM参数如下：
+
+```shell
+java -Xmx4048m -Xms4048m -Xmn2024m -XX:SurvivorRatio=7  -Xss256k -XX:MetaspaceSize=300m -XX:MaxMetaspaceSize=100m -XX:+UseConcMarkSweepGC  -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+UseGCLogFileRotation -XX:+PrintHeapAtGC -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=50M -Xloggc:./logs/emps-gc-%t.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./logs/emps-heap.dump OOM
+```
+
+可以看到相同时间内，确实Minor GC减少了，但是时间增大了，因为复制算法，基本都是存活的，复制需要耗费大量的性能和时间：
+
+![调优实战-减少MinorGC后VisualVM显示](images/JVM/调优实战-减少MinorGC后VisualVM显示.jpg)
+
+所以，调优要有取舍，取得一个平衡点，性能、状态达到佳就OK了，并没最佳的状态，这就是调优的基本法则，而且调优也是一个细活，所谓慢工出细活，需要耗费大量的时间，慢慢调，不断的做对比。
+
+
+
+## 调优参数
+
+### 堆
+
+- -Xms1024m 设置堆的初始大小
+- -Xmx1024m 设置堆的最大大小
+- -XX:NewSize=1024m 设置年轻代的初始大小
+- -XX:MaxNewSize=1024m 设置年轻代的最大值
+- -XX:SurvivorRatio=8 Eden和S区的比例
+- -XX:NewRatio=4 设置老年代和新生代的比例
+- -XX:MaxTenuringThreshold=10 设置晋升老年代的年龄条件
+
+
+
+### 栈
+
+- -Xss128k
+
+
+
+### 元空间
+
+- -XX:MetasapceSize=200m 设置初始元空间大小
+- -XX:MaxMatespaceSize=200m 设置最大元空间大小 默认无限制
+
+
+
+### 直接内存
+
+- -XX:MaxDirectMemorySize 设置直接内存的容量，默认与堆最大值一样
+
+
+
+### 日志
+
+- -Xloggc:/opt/app/ard-user/ard-user-gc-%t.log   设置日志目录和日志名称
+- -XX:+UseGCLogFileRotation           开启滚动生成日志
+- -XX:NumberOfGCLogFiles=5            滚动GC日志文件数，默认0，不滚动
+- -XX:GCLogFileSize=20M               GC文件滚动大小，需开 UseGCLogFileRotation
+- -XX:+PrintGCDetails      开启记录GC日志详细信息（包括GC类型、各个操作使用的时间）,并且在程序运行结束打印出JVM的内存占用情况
+- -XX:+ PrintGCDateStamps             记录系统的GC时间
+- -XX:+PrintGCCause                   产生GC的原因(默认开启)
+
+
+
+### GC
+
+#### Serial垃圾收集器（新生代）开启
+
+- -XX:+UseSerialGC 关闭：
+- -XX:-UseSerialGC //新生代使用Serial  老年代则使用SerialOld
+
+
+
+#### Parallel Scavenge收集器（新生代）开启
+
+- -XX:+UseParallelOldGC 关闭
+- -XX:-UseParallelOldGC  新生代使用功能Parallel Scavenge 老年代将会使用Parallel Old收集器
+
+
+
+#### ParallelOl垃圾收集器（老年代）开启
+
+- -XX:+UseParallelGC 关闭
+- -XX:-UseParallelGC 新生代使用功能Parallel Scavenge 老年代将会使用Parallel Old收集器
+
+
+
+#### ParNew垃圾收集器（新生代）开启
+
+- -XX:+UseParNewGC 关闭
+- -XX:-UseParNewGC //新生代使用功能ParNew 老年代则使用功能CMS
+
+
+
+#### CMS垃圾收集器（老年代）开启
+
+- -XX:+UseConcMarkSweepGC 关闭
+- -XX:-UseConcMarkSweepGC
+- -XX:MaxGCPauseMillis  GC停顿时间，垃圾收集器会尝试用各种手段达到这个时间，比如减小年轻代
+- -XX:+UseCMSCompactAtFullCollection 用于在CMS收集器不得不进行FullGC时开启内存碎片的合并整理过程，由于这个内存整理必须移动存活对象，（在Shenandoah和ZGC出现前）是无法并发的
+- -XX：CMSFullGCsBefore-Compaction 多少次FullGC之后压缩一次，默认值为0，表示每次进入FullGC时都进行碎片整理）
+- -XX:CMSInitiatingOccupancyFraction 当老年代使用达到该比例时会触发FullGC，默认是92
+- -XX:+UseCMSInitiatingOccupancyOnly 这个参数搭配上面那个用，表示是不是要一直使用上面的比例触发FullGC，如果设置则只会在第一次FullGC的时候使用-XX:CMSInitiatingOccupancyFraction的值，之后会进行自动调整
+- -XX:+CMSScavengeBeforeRemark 在FullGC前启动一次MinorGC，目的在于减少老年代对年轻代的引用，降低CMSGC的标记阶段时的开销，一般CMS的GC耗时80%都在标记阶段
+- -XX:+CMSParallellnitialMarkEnabled 默认情况下初始标记是单线程的，这个参数可以让他多线程执行，可以减少STW
+- -XX:+CMSParallelRemarkEnabled 使用多线程进行重新标记，目的也是为了减少STW
+
+
+
+#### G1垃圾收集器开启
+
+- -XX:+UseG1GC 关闭
+- -XX:-UseG1GC
+- -XX：G1HeapRegionSize 设置每个Region的大小，取值范围为1MB～32MB
+- -XX：MaxGCPauseMillis 设置垃圾收集器的停顿时间，默认值是200毫秒，通常把期望停顿时间设置为一两百毫秒或者两三百毫秒会是比较合理的
+
+
+
 # JDK Tools
 
 ## jps
