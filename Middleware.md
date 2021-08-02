@@ -4338,7 +4338,7 @@ public Object invoke(final Object proxy, final Method method, final Object[] arg
 
 
 
-
+### 其它
 
 Feign是是一个声明式的Web Service客户端。
 
