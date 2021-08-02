@@ -3744,6 +3744,428 @@ Netflix Eureka 是由 Netflix 开源的一款基于 REST 的服务发现组件�
 
 
 
+### Eurka工作流程
+Eureka的工作流程如下：
+
+1. **Eureka Server 启动成功，等待服务端注册**。在启动过程中如果配置了集群，集群之间定时通过 Replicate 同步注册表，每个 Eureka Server 都存在独立完整的服务注册表信息
+2. Eureka Client 启动时根据配置的 Eureka Server 地址**去注册中心注册服务**
+3. Eureka Client 会**每30s向 Eureka Server 发送一次心跳请求**，证明客户端服务正常
+4. 当Eureka Server **90s内没有收到Eureka Client的心跳，注册中心则认为该节点失效**，会注销该实例
+5. **单位时间内Eureka Server统计到有大量的Eureka Client没有上送心跳，则认为可能为网络异常**，进入自我保护机制，不再剔除没有上送心跳的客户端
+6. **当Eureka Client心跳请求恢复正常之后，Eureka Server自动退出自我保护模式**
+7. **Eureka Client定时全量或者增量从注册中心获取服务注册表，并且将获取到的信息缓存到本地**
+8. 服务调用时，Eureka Client会先从本地缓存找调取的服务。若获取不到，先从注册中心刷新注册表，再同步到本地缓存
+9. Eureka Client获取到目标服务器信息，发起服务调用
+10. Eureka Client程序关闭时向Eureka Server发送取消请求，Eureka Server将实例从注册表中删除
+
+
+
+### Eureka Server
+
+Eureka Server注册中心服务端主要对外提供了三个功能：
+
+- **服务注册**
+  服务提供者启动时，会通过 Eureka Client 向 Eureka Server 注册信息，Eureka Server 会存储该服务的信息，Eureka Server 内部有二层缓存机制来维护整个注册表。
+
+- **提供注册表**
+  服务消费者在调用服务时，如果 Eureka Client 没有缓存注册表的话，会从 Eureka Server 获取最新的注册表。
+
+- **同步状态**
+  Eureka Client 通过注册、心跳机制和 Eureka Server 同步当前客户端的状态。
+
+
+
+**自我保护机制**
+默认情况下，如果 Eureka Server 在一定的 90s 内没有接收到某个微服务实例的心跳，会注销该实例。但是在微服务架构下服务之间通常都是跨进程调用，网络通信往往会面临着各种问题，比如微服务状态正常，网络分区故障，导致此实例被注销。固定时间内大量实例被注销，可能会严重威胁整个微服务架构的可用性。为了解决这个问题，Eureka 开发了自我保护机制，那么什么是自我保护机制呢？Eureka Server 在运行期间会去统计心跳失败比例在 15 分钟之内是否低于 85%，如果低于 85%，Eureka Server 即会进入自我保护机制。Eureka Server 触发自我保护机制后，页面会出现提示：
+![EurekaServer触发自我保护机制](images/Middleware/EurekaServer触发自我保护机制.png)
+
+Eureka Server进入自我保护机制，会出现以下几种情况：
+
+- **Eureka不再从注册列表中移除因为长时间没收到心跳而应该过期的服务**
+- **Eureka仍然能够接受新服务的注册和查询请求，但是不会被同步到其它节点上(即保证当前节点依然可用)**
+- **当网络稳定时，当前实例新的注册信息会被同步到其它节点中**
+
+Eureka自我保护机制是为了防止误杀服务而提供的一个机制：
+
+- **当个别客户端出现心跳失联时，则认为是客户端的问题，剔除掉客户端**
+- **当Eureka捕获到大量的心跳失败时，则认为可能是网络问题，进入自我保护机制**
+- **当客户端心跳恢复时，Eureka会自动退出自我保护机制**
+
+如果在保护期内刚好这个服务提供者非正常下线了，此时服务消费者就会拿到一个无效的服务实例，即会调用失败。对于这个问题需要服务消费者端要有一些容错机制，如重试，断路器等。通过在 Eureka Server 配置如下参数，开启或者关闭保护机制，生产环境建议打开：
+
+```properties
+eureka.server.enable-self-preservation=true
+```
+
+
+
+### Eureka Client
+
+Eureka Client注册中心客户端是一个 Java 客户端，用于简化与 Eureka Server 的交互。Eureka Client 会拉取、更新和缓存 Eureka Server 中的信息。因此当所有的 Eureka Server 节点都宕掉，服务消费者依然可以使用缓存中的信息找到服务提供者，但是当服务有更改的时候会出现信息不一致。
+
+- **Register —— 服务注册**
+  服务的提供者，将自身注册到注册中心，服务提供者也是一个 Eureka Client。当 Eureka Client 向 Eureka Server 注册时，它提供自身的元数据，比如 IP 地址、端口，运行状况指示符 URL，主页等。
+
+- **Renew —— 服务续约**
+  Eureka Client 会每隔 30 秒发送一次心跳来续约。 通过续约来告知 Eureka Server 该 Eureka Client 运行正常，没有出现问题。 默认情况下，如果 Eureka Server 在 90 秒内没有收到 Eureka Client 的续约，Server 端会将实例从其注册表中删除，此时间可配置，一般情况不建议更改。服务续约的两个重要属性：
+
+  ```properties
+  # 服务续约任务的调用间隔时间，默认为30秒
+  eureka.instance.lease-renewal-interval-in-seconds=30
+  # 服务失效的时间，默认为90秒。
+  eureka.instance.lease-expiration-duration-in-seconds=90
+  ```
+
+- **Eviction —— 服务剔除**
+  当Eureka Client和Eureka Server不再有心跳时，Eureka Server会将该服务实例从服务注册列表中删除，即服务剔除。
+
+- **Cancel —— 服务下线**
+  Eureka Client 在程序关闭时向 Eureka Server 发送取消请求。 发送请求后，该客户端实例信息将从 Eureka Server 的实例注册表中删除。该下线请求不会自动完成，它需要调用以下内容：
+
+  ```java
+  DiscoveryManager.getInstance().shutdownComponent();
+  ```
+
+- **GetRegisty —— 获取注册列表信息**
+  Eureka Client 从服务器获取注册表信息，并将其缓存在本地。客户端会使用该信息查找其他服务，从而进行远程调用。该注册列表信息定期（每30秒钟）更新一次。每次返回注册列表信息可能与 Eureka Client 的缓存信息不同，Eureka Client 自动处理。
+
+  如果由于某种原因导致注册列表信息不能及时匹配，Eureka Client 则会重新获取整个注册表信息。 Eureka Server 缓存注册列表信息，整个注册表以及每个应用程序的信息进行了压缩，压缩内容和没有压缩的内容完全相同。Eureka Client 和 Eureka Server 可以使用 JSON/XML 格式进行通讯。在默认情况下 Eureka Client 使用压缩 JSON 格式来获取注册列表的信息。获取服务是服务消费者的基础，所以必有两个重要参数需要注意：
+
+  ```properties
+  # 启用服务消费者从注册中心拉取服务列表的功能
+  eureka.client.fetch-registry=true
+  # 设置服务消费者从注册中心拉取服务列表的间隔
+  eureka.client.registry-fetch-interval-seconds=30
+  ```
+
+- **Remote Call —— 远程调用**
+  当Eureka Client从注册中心获取到服务提供者信息后，就可以通过Http请求调用对应的服务；服务提供者有多个时，Eureka Client客户端会通过Ribbon自动进行负载均衡。
+
+
+
+### Eureka缓存机制
+
+**Eureka Server数据存储**
+
+Eureka Server的数据存储层是双层的 ConcurrentHashMap：
+
+```java
+private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry= new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
+```
+
+- **key**：为服务名，即 `spring.application.name`，也就是客户端实例注册的应用名
+- **subKey**：为 `instanceId`，也就是服务的唯一实例ID
+- **Lease< InstanceInfo >**：Lease对象存储着这个实例的所有注册信息，包括 ip 、端口、属性等
+
+
+
+**Eureka Server缓存机制**
+
+Eureka Server为了提供响应效率，提供了两层的缓存结构，将Eureka Client所需要的注册信息，直接存储在缓存结构中。
+
+- **第一层缓存：readOnlyCacheMap，本质上是 ConcurrentHashMap**
+
+  依赖定时从 readWriteCacheMap 同步数据，默认时间为 30 秒。
+
+  readOnlyCacheMap： 是一个 CurrentHashMap 只读缓存，这个主要是为了供客户端获取注册信息时使用，其缓存更新，依赖于定时器的更新，通过和 readWriteCacheMap 的值做对比，如果数据不一致，则以 readWriteCacheMap 的数据为准。
+
+- **第二层缓存：readWriteCacheMap，本质上是 Guava 缓存**
+
+  readWriteCacheMap：readWriteCacheMap 的数据主要同步于存储层。当获取缓存时判断缓存中是否没有数据，如果不存在此数据，则通过 CacheLoader 的 load 方法去加载，加载成功之后将数据放入缓存，同时返回数据。readWriteCacheMap缓存过期时间，默认为180秒，当服务下线、过期、注册、状态变更，都会来清除此缓存中的数据。
+
+Eureka Client 获取全量或者增量的数据时，会先从一级缓存中获取；如果一级缓存中不存在，再从二级缓存中获取；如果二级缓存也不存在，这时候先将存储层的数据同步到缓存中，再从缓存中获取。通过 Eureka Server 的二层缓存机制，可以非常有效地提升 Eureka Server 的响应时间，通过数据存储层和缓存层的数据切割，根据使用场景来提供不同的数据支持。
+
+
+
+**其它缓存设计**
+
+除过 Eureka Server 端存在缓存外，Eureka Client 也同样存在着缓存机制，Eureka Client 启动时会全量拉取服务列表，启动后每隔 30 秒从 Eureka Server 量获取服务列表信息，并保持在本地缓存中。Eureka Client 增量拉取失败，或者增量拉取之后对比 hashcode 发现不一致，就会执行全量拉取，这样避免了网络某时段分片带来的问题，同样会更新到本地缓存。同时对于服务调用，如果涉及到 ribbon 负载均衡，那么 ribbon 对于这个实例列表也有自己的缓存，这个缓存定时(默认30秒)从 Eureka Client 的缓存更新。这么多的缓存机制可能就会造成一些问题，一个服务启动后可能最长需要 90s 才能被其它服务感知到：
+
+1. 首先，Eureka Server 维护每 30s 更新的响应缓存
+2. Eureka Client 对已经获取到的注册信息也做了 30s 缓存
+3. 负载均衡组件 Ribbon 也有 30s 缓存
+
+这三个缓存加起来，就有可能导致服务注册最长延迟 90s ，这个需要我们在特殊业务场景中注意其产生的影响。
+
+
+
+### 常用配置
+
+Eureka Server常用配置：
+
+```properties
+#服务端开启自我保护模式，前面章节有介绍
+eureka.server.enable-self-preservation=true
+#扫描失效服务的间隔时间（单位毫秒，默认是60*1000）即60秒
+eureka.server.eviction-interval-timer-in-ms= 60000
+#间隔多长时间，清除过期的 delta 数据
+eureka.server.delta-retention-timer-interval-in-ms=0
+#请求频率限制器
+eureka.server.rate-limiter-burst-size=10
+#是否开启请求频率限制器
+eureka.server.rate-limiter-enabled=false
+#请求频率的平均值
+eureka.server.rate-limiter-full-fetch-average-rate=100
+#是否对标准的client进行频率请求限制。如果是false，则只对非标准client进行限制
+eureka.server.rate-limiter-throttle-standard-clients=false
+#注册服务、拉去服务列表数据的请求频率的平均值
+eureka.server.rate-limiter-registry-fetch-average-rate=500
+#设置信任的client list
+eureka.server.rate-limiter-privileged-clients=
+#在设置的时间范围类，期望与client续约的百分比。
+eureka.server.renewal-percent-threshold=0.85
+#多长时间更新续约的阈值
+eureka.server.renewal-threshold-update-interval-ms=0
+#对于缓存的注册数据，多长时间过期
+eureka.server.response-cache-auto-expiration-in-seconds=180
+#多长时间更新一次缓存中的服务注册数据
+eureka.server.response-cache-update-interval-ms=0
+#缓存增量数据的时间，以便在检索的时候不丢失信息
+eureka.server.retention-time-in-m-s-in-delta-queue=0
+#当时间戳不一致的时候，是否进行同步
+eureka.server.sync-when-timestamp-differs=true
+#是否采用只读缓存策略，只读策略对于缓存的数据不会过期。
+eureka.server.use-read-only-response-cache=true
+
+
+################server node 与 node 之间关联的配置#####################33
+#发送复制数据是否在request中，总是压缩
+eureka.server.enable-replicated-request-compression=false
+#指示群集节点之间的复制是否应批处理以提高网络效率。
+eureka.server.batch-replication=false
+#允许备份到备份池的最大复制事件数量。而这个备份池负责除状态更新的其他事件。可以根据内存大小，超时和复制流量，来设置此值得大小
+eureka.server.max-elements-in-peer-replication-pool=10000
+#允许备份到状态备份池的最大复制事件数量
+eureka.server.max-elements-in-status-replication-pool=10000
+#多个服务中心相互同步信息线程的最大空闲时间
+eureka.server.max-idle-thread-age-in-minutes-for-peer-replication=15
+#状态同步线程的最大空闲时间
+eureka.server.max-idle-thread-in-minutes-age-for-status-replication=15
+#服务注册中心各个instance相互复制数据的最大线程数量
+eureka.server.max-threads-for-peer-replication=20
+#服务注册中心各个instance相互复制状态数据的最大线程数量
+eureka.server.max-threads-for-status-replication=1
+#instance之间复制数据的通信时长
+eureka.server.max-time-for-replication=30000
+#正常的对等服务instance最小数量。-1表示服务中心为单节点。
+eureka.server.min-available-instances-for-peer-replication=-1
+#instance之间相互复制开启的最小线程数量
+eureka.server.min-threads-for-peer-replication=5
+#instance之间用于状态复制，开启的最小线程数量
+eureka.server.min-threads-for-status-replication=1
+#instance之间复制数据时可以重试的次数
+eureka.server.number-of-replication-retries=5
+#eureka节点间间隔多长时间更新一次数据。默认10分钟。
+eureka.server.peer-eureka-nodes-update-interval-ms=600000
+#eureka服务状态的相互更新的时间间隔。
+eureka.server.peer-eureka-status-refresh-time-interval-ms=0
+#eureka对等节点间连接超时时间
+eureka.server.peer-node-connect-timeout-ms=200
+#eureka对等节点连接后的空闲时间
+eureka.server.peer-node-connection-idle-timeout-seconds=30
+#节点间的读数据连接超时时间
+eureka.server.peer-node-read-timeout-ms=200
+#eureka server 节点间连接的总共最大数量
+eureka.server.peer-node-total-connections=1000
+#eureka server 节点间连接的单机最大数量
+eureka.server.peer-node-total-connections-per-host=10
+#在服务节点启动时，eureka尝试获取注册信息的次数
+eureka.server.registry-sync-retries=
+#在服务节点启动时，eureka多次尝试获取注册信息的间隔时间
+eureka.server.registry-sync-retry-wait-ms=
+#当eureka server启动的时候，不能从对等节点获取instance注册信息的情况，应等待多长时间。
+eureka.server.wait-time-in-ms-when-sync-empty=0
+```
+
+Eureka Client 常用配置：
+
+```properties
+#该客户端是否可用
+eureka.client.enabled=true
+#实例是否在eureka服务器上注册自己的信息以供其他服务发现，默认为true
+eureka.client.register-with-eureka=false
+#此客户端是否获取eureka服务器注册表上的注册信息，默认为true
+eureka.client.fetch-registry=false
+#是否过滤掉，非UP的实例。默认为true
+eureka.client.filter-only-up-instances=true
+#与Eureka注册服务中心的通信zone和url地址
+eureka.client.serviceUrl.defaultZone=http://${eureka.instance.hostname}:${server.port}/eureka/
+
+#client连接Eureka服务端后的空闲等待时间，默认为30 秒
+eureka.client.eureka-connection-idle-timeout-seconds=30
+#client连接eureka服务端的连接超时时间，默认为5秒
+eureka.client.eureka-server-connect-timeout-seconds=5
+#client对服务端的读超时时长
+eureka.client.eureka-server-read-timeout-seconds=8
+#client连接all eureka服务端的总连接数，默认200
+eureka.client.eureka-server-total-connections=200
+#client连接eureka服务端的单机连接数量，默认50
+eureka.client.eureka-server-total-connections-per-host=50
+#执行程序指数回退刷新的相关属性，是重试延迟的最大倍数值，默认为10
+eureka.client.cache-refresh-executor-exponential-back-off-bound=10
+#执行程序缓存刷新线程池的大小，默认为5
+eureka.client.cache-refresh-executor-thread-pool-size=2
+#心跳执行程序回退相关的属性，是重试延迟的最大倍数值，默认为10
+eureka.client.heartbeat-executor-exponential-back-off-bound=10
+#心跳执行程序线程池的大小,默认为5
+eureka.client.heartbeat-executor-thread-pool-size=5
+# 询问Eureka服务url信息变化的频率（s），默认为300秒
+eureka.client.eureka-service-url-poll-interval-seconds=300
+#最初复制实例信息到eureka服务器所需的时间（s），默认为40秒
+eureka.client.initial-instance-info-replication-interval-seconds=40
+#间隔多长时间再次复制实例信息到eureka服务器，默认为30秒
+eureka.client.instance-info-replication-interval-seconds=30
+#从eureka服务器注册表中获取注册信息的时间间隔（s），默认为30秒
+eureka.client.registry-fetch-interval-seconds=30
+
+# 获取实例所在的地区。默认为us-east-1
+eureka.client.region=us-east-1
+#实例是否使用同一zone里的eureka服务器，默认为true，理想状态下，eureka客户端与服务端是在同一zone下
+eureka.client.prefer-same-zone-eureka=true
+# 获取实例所在的地区下可用性的区域列表，用逗号隔开。（AWS）
+eureka.client.availability-zones.china=defaultZone,defaultZone1,defaultZone2
+#eureka服务注册表信息里的以逗号隔开的地区名单，如果不这样返回这些地区名单，则客户端启动将会出错。默认为null
+eureka.client.fetch-remote-regions-registry=
+#服务器是否能够重定向客户端请求到备份服务器。 如果设置为false，服务器将直接处理请求，如果设置为true，它可能发送HTTP重定向到客户端。默认为false
+eureka.client.allow-redirects=false
+#客户端数据接收
+eureka.client.client-data-accept=
+#增量信息是否可以提供给客户端看，默认为false
+eureka.client.disable-delta=false
+#eureka服务器序列化/反序列化的信息中获取“_”符号的的替换字符串。默认为“__“
+eureka.client.escape-char-replacement=__
+#eureka服务器序列化/反序列化的信息中获取“$”符号的替换字符串。默认为“_-”
+eureka.client.dollar-replacement="_-"
+#当服务端支持压缩的情况下，是否支持从服务端获取的信息进行压缩。默认为true
+eureka.client.g-zip-content=true
+#是否记录eureka服务器和客户端之间在注册表的信息方面的差异，默认为false
+eureka.client.log-delta-diff=false
+# 如果设置为true,客户端的状态更新将会点播更新到远程服务器上，默认为true
+eureka.client.on-demand-update-status-change=true
+#此客户端只对一个单一的VIP注册表的信息感兴趣。默认为null
+eureka.client.registry-refresh-single-vip-address=
+#client是否在初始化阶段强行注册到服务中心，默认为false
+eureka.client.should-enforce-registration-at-init=false
+#client在shutdown的时候是否显示的注销服务从服务中心，默认为true
+eureka.client.should-unregister-on-shutdown=true
+```
+
+Eureka Instance 常用配置：
+
+```properties
+#服务注册中心实例的主机名
+eureka.instance.hostname=localhost
+#注册在Eureka服务中的应用组名
+eureka.instance.app-group-name=
+#注册在的Eureka服务中的应用名称
+eureka.instance.appname=
+#该实例注册到服务中心的唯一ID
+eureka.instance.instance-id=
+#该实例的IP地址
+eureka.instance.ip-address=
+#该实例，相较于hostname是否优先使用IP
+eureka.instance.prefer-ip-address=false
+```
+
+
+
+### Eureka集群原理
+
+![Eureka集群原理](images/Middleware/Eureka集群原理.png)
+
+- **Eureka Server集群相互之间通过 Replicate(复制) 来同步数据**
+
+  相互之间不区分主节点和从节点，所有的节点都是平等的。在这种架构中，节点通过彼此互相注册来提高可用性，每个节点需要添加一个或多个有效的 serviceUrl 指向其它节点。
+
+- **如果某台Eureka Server宕机，Eureka Client的请求会自动切换到新的Eureka Server节点**
+
+  当宕机的服务器重新恢复后，Eureka 会再次将其纳入到服务器集群管理之中。当节点开始接受客户端请求时，所有的操作都会进行节点间复制，将请求复制到其它 Eureka Server 所知的所有节点中。
+
+- **Eureka Server的同步遵循一个原则：只要有一条边将节点连接，就可以进行信息传播与同步**
+
+  如果存在多个节点，只需要将节点之间两两连接起来形成通路，那么其它注册中心都可以共享信息。每个 Eureka Server 同时也是 Eureka Client，多个 Eureka Server 之间通过 P2P 的方式完成服务注册表的同步。
+
+- **Eureka Server集群之间的状态是采用异步方式同步的**
+
+  所以不保证节点间的状态一定是一致的，不过基本能保证最终状态是一致的。
+
+
+
+**Eureka 分区**
+Eureka 提供了 Region 和 Zone 两个概念来进行分区，这两个概念均来自于亚马逊的 AWS:
+
+- **region**：可以理解为地理上的不同区域，比如亚洲地区，中国区或者深圳等等。没有具体大小的限制。根据项目具体的情况，可以自行合理划分 region
+- **zone**：可以简单理解为 region 内的具体机房，比如说 region 划分为深圳，然后深圳有两个机房，就可以在此 region 之下划分出 zone1、zone2 两个 zone
+
+上图中的 us-east-1c、us-east-1d、us-east-1e 就代表了不同的 Zone。Zone 内的 Eureka Client 优先和 Zone 内的 Eureka Server 进行心跳同步，同样调用端优先在 Zone 内的 Eureka Server 获取服务列表，当 Zone 内的 Eureka Server 挂掉之后，才会从别的 Zone 中获取信息。
+
+
+
+**Eurka 保证 AP**
+
+Eureka Server 各个节点都是平等的，几个节点挂掉不会影响正常节点的工作，剩余的节点依然可以提供注册和查询服务。而 Eureka Client 在向某个 Eureka 注册时，如果发现连接失败，则会自动切换至其它节点。只要有一台 Eureka Server 还在，就能保证注册服务可用(保证可用性)，只不过查到的信息可能不是最新的(不保证强一致性)。
+
+
+
+### Eureka一致性协议
+
+Eureka 和 Zookeeper 的最大区别： Eureka 是 AP 模型，Zookeeper 是 CP 模型。在出现脑裂等场景时，Eureka 可用性是每一位，也就是说出现脑裂时，每个分区仍可以独立提供服务，是去中心化的。那Eureka是如何实现最终一致性的呢？
+
+
+
+#### 消息广播
+
+1. Eureka Server 管理了全部的服务器列表（PeerEurekaNodes）
+
+2. 当 Eureka Server 收到客户端的注册、下线、心跳请求时，通过 PeerEurekaNode 向其余的服务器进行消息广播，如果广播失败则重试，直到任务过期后取消任务，此时这两台服务器之间数据会出现短暂的不一致。
+
+   **注意：** 虽然消息广播失败，但只要收到客户端的心跳，仍会向所有的服务器（包括失联的服务器）广播心跳任务。
+
+3. 如果网络恢复正常，收到了其它服务器广播的心跳任务，此时可能有三种情况：
+
+   1. 一是脑裂很快恢复，一切正常；
+   2. 二是该实例已经自动过期，则重新进行注册；
+   3. 三是数据冲突，出现不一致的情况，则需要发起同步请求，其实也就是重新注册一次，同时踢除老的实例。
+
+   总之，通过集群之间的消息广播可以实现数据的最终一致性。
+
+
+
+**服务注册**
+
+1. Spring Cloud Eureka 在应用启动时，会在 EurekaAutoServiceRegistration 这个类初始化的时候，主动去 Eureka Server 端注册。
+2. Eureka 在启动完成之后会启动一个 40 秒执行一次的定时任务，该任务会去监测自身的 IP 信息以及自身的配置信息是否发生改变，如果发生改变，则会重新发起注册。
+3. 续约返回 404 状态码时，会去重新注册
+
+
+
+**主动下线**
+
+Eureka 会在 spring 容器销毁的时候执行 shutDown 方法 ，该方法首先会将自身的状态改为 DOWN，接着发送cancle 命令至 Eureka Server 请求下掉自己的服务。
+
+
+
+**心跳续约与自动下线**
+
+健康检测，一般都是 TTL(Time To Live) 机制。eg: 客户端每 5s 发送心跳，服务端 15s 没收到心跳包，更新实例状态为不健康， 30s 未收到心跳包，从服务列表中删除。**Eureka Server 默认每 30s 发送心跳包，90s 未收心跳则删除。这个清理过期实例的线程，每 60s 执行一次。**
+
+
+
+#### 崩溃恢复
+
+**重启**
+
+Spring Cloud Eureka 启动时，在初始化 EurekaServerBootstrap#initEurekaServerContext 时会调用 PeerAwareInstanceRegistryImpl#syncUp 从其它 Eureka 中同步数据。
+
+
+
+**脑裂**
+
+- 发生脑裂后：和 Eureka Server 同区的服务可以正常访问，而不同区的服务则自动过期。
+- 脑裂恢复后：接收其它 Eureka Sever 发送过来的心跳请求，此时有三种情况：一是脑裂很快恢复，一切正常；二是该实例已经自动过期，则重新进行注册；三是数据冲突，出现不一致的情况，则需要发起同步请求。
+
+
+
 ## Zuul
 
 Zuul 是由 Netflix 孵化的一个致力于“网关 “解决方案的开源组件。
@@ -3766,6 +4188,157 @@ Zuul 是由 Netflix 孵化的一个致力于“网关 “解决方案的开源�
 
 
 ## Feign
+
+`Feign` 使用时分成两步：一是生成 Feign 的动态代理；二是 Feign 执行。
+
+![Feign整体设计](images/Middleware/Feign整体设计.png)
+
+**总结：**
+
+- 前两步是生成动态对象：将 Method 方法的注解解析成 MethodMetadata，并最终生成 Feign 动态代理对象
+- 后几步是调用过程：根据解析的MethodMetadata对象，将Method方法的参数转换成Request，最后调用Client发送请求
+
+
+
+### Feign动态代理
+
+![Feign动态代理](images/Middleware/Feign动态代理.png)
+
+`Feign` 的默认实现是 ReflectiveFeign，通过 Feign.Builder 构建。**总结** 
+
+1. Contract 统一将方法解析 MethodMetadata(*)，这样就可以通过实现不同的 Contract 适配各种 REST 声明式规范。
+2. buildTemplate 实际上将 Method 方法的参数转换成 Request。
+3. 将 metadata 和 buildTemplate 封装成 MethodHandler。
+
+
+
+### 基于Feign实现负载均衡
+
+基于 Feign 的负载均衡（整合 Ribbon）。想要进行负载均衡，那就要对 Client 进行包装，实现负载均衡。 相关代码见`RibbonClient`和`LBClient`。
+
+```java
+// RibbonClient 主要逻辑
+private final Client delegate;
+private final LBClientFactory lbClientFactory;
+public Response execute(Request request, Request.Options options) throws IOException {
+    try {
+        URI asUri = URI.create(request.url());
+        String clientName = asUri.getHost();
+        URI uriWithoutHost = cleanUrl(request.url(), clientName);
+        // 封装 RibbonRequest，包含 Client、Request、uri
+        LBClient.RibbonRequest ribbonRequest =
+            new LBClient.RibbonRequest(delegate, request, uriWithoutHost);
+        // executeWithLoadBalancer 实现负载均衡
+        return lbClient(clientName).executeWithLoadBalancer(
+            ribbonRequest,
+            new FeignOptionsClientConfig(options)).toResponse();
+    } catch (ClientException e) {
+        propagateFirstIOException(e);
+        throw new RuntimeException(e);
+    }
+}
+```
+
+**总结：** 实际上是把 Client 对象包装了一下，通过 executeWithLoadBalancer 进行负载均衡，这是 Ribbon 提供了 API。更多关于 Ribbon 的负载均衡就不在这进一步说明了。
+
+```java
+public final class LBClient extends AbstractLoadBalancerAwareClient
+	<LBClient.RibbonRequest, LBClient.RibbonResponse> {
+	
+	// executeWithLoadBalancer 方法通过负载均衡算法后，最终调用 execute
+	@Override
+    public RibbonResponse execute(RibbonRequest request, IClientConfig configOverride)
+            throws IOException, ClientException {
+        Request.Options options;
+        if (configOverride != null) {
+            options = new Request.Options(
+                    configOverride.get(CommonClientConfigKey.ConnectTimeout, connectTimeout),
+                    configOverride.get(CommonClientConfigKey.ReadTimeout, readTimeout),
+                    configOverride.get(CommonClientConfigKey.FollowRedirects, followRedirects));
+        } else {
+            options = new Request.Options(connectTimeout, readTimeout);
+        }
+        // http 请求
+        Response response = request.client().execute(request.toRequest(), options);
+        if (retryableStatusCodes.contains(response.status())) {
+            response.close();
+            throw new ClientException(ClientException.ErrorType.SERVER_THROTTLED);
+        }
+        return new RibbonResponse(request.getUri(), response);
+    }
+}
+```
+
+
+
+### 基于Feign实现熔断
+
+基于 Feign 的熔断与限流（整合 Hystrix）。想要进行限流，那就要在方法执行前进行拦截，也就是重写InvocationHandlerFactory，在方法执行前进行熔断与限流。相关代码见 `HystrixFeign`，其实也就是实现了 HystrixInvocationHandler。
+
+```java
+// HystrixInvocationHandler 主要逻辑
+public Object invoke(final Object proxy, final Method method, final Object[] args)
+      throws Throwable {
+    HystrixCommand<Object> hystrixCommand =
+        new HystrixCommand<Object>(setterMethodMap.get(method)) {
+            @Override
+            protected Object run() throws Exception {
+                return HystrixInvocationHandler.this.dispatch.get(method).invoke(args);
+            }
+            @Override
+            protected Object getFallback() {
+            };
+        }
+    ...
+	return hystrixCommand.execute();
+}
+```
+
+
+
+### Feign参数编码整体流程
+
+![Feign参数编码整体流程](images/Middleware/Feign参数编码整体流程.png)**总结：** 
+
+- 前两步是`Feign`代理生成阶段，解析方法参数及注解元信息。后三步是调用阶段，将方法参数编码成Http请求的数据格式
+- Contract 接口将 UserService 中每个接口中的方法及其注解解析为 MethodMetadata，然后使用 RequestTemplate# request 编码为一个 Request
+- RequestTemplate#request 编码为一个 Request 后就可以调用 Client#execute 发送 Http 请求
+- Client 的具体实现有 HttpURLConnection、Apache HttpComponnets、OkHttp3 、Netty 等。本文关注前三步：即 Feign 方法元信息解析及参数编码过程。
+
+
+
+### Feign整体装配流程
+
+![Feign整体装配流程](images/Middleware/Feign整体装配流程.png)
+
+**总结：** OpenFeign 装配有两个入口：
+
+1. @EnableAutoConfiguration 自动装配（spring.factories）
+
+   ```properties
+   org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+   org.springframework.cloud.openfeign.ribbon.FeignRibbonClientAutoConfiguration,\
+   org.springframework.cloud.openfeign.FeignAutoConfiguration
+   ```
+
+   - FeignAutoConfiguration自动装配 FeignContext 和 Targeter，以及 Client 配置。
+     - `FeignContext` 是每个 FeignClient 的装配上下文，默认的配置是 FeignClientsConfiguration
+     - `Targeter` 有两种实现：一是 DefaultTargeter，直接调用 Feign.Builder； **二是 HystrixTargeter，调用 HystrixFeign.Builder，开启熔断。**
+     - `Client` ：自动装配 ApacheHttpClient，OkHttpClient，装配条件不满足，默认是 Client.Default。但这些 Client 都没有实现负载均衡。
+   - FeignRibbonClientAutoConfiguration实现负载均衡，负载均衡是在 Client 这一层实现的。
+     - `HttpClientFeignLoadBalancedConfiguration` ApacheHttpClient 实现负载均衡
+     - `OkHttpFeignLoadBalancedConfiguration` OkHttpClient实现负载均衡
+     - `DefaultFeignLoadBalancedConfiguration` Client.Default实现负载均衡
+
+2. @EnableFeignClients 自动扫描
+
+   @EnableFeignClients 注入 FeignClientsRegistrar，FeignClientsRegistrar 开启自动扫描，将包下 @FeignClient 标注的接口包装成 FeignClientFactoryBean 对象，最终通过 Feign.Builder 生成该接口的代理对象。而 Feign.Builder 的默认配置是 FeignClientsConfiguration，是在 FeignAutoConfiguration 自动注入的。
+
+**注意：** 熔断与限流是 FeignAutoConfiguration 通过注入 HystrixTargeter 完成的，而负载均衡是FeignRibbonClientAutoConfiguration 注入的。
+
+
+
+
 
 Feign是是一个声明式的Web Service客户端。
 
