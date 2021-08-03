@@ -47,14 +47,15 @@ JVM试图定义一种统一的内存模型，能将各种底层硬件以及操�
 
 **线程隔离数据区：**
 
-- **程序计数器：** 当前线程所执行字节码的行号指示器
-- **虚拟机栈：** 里面的元素叫栈帧，存储局部变量表、操作栈、动态链接、方法出口等，方法被调用到执行完成的过程对应一个栈帧在虚拟机栈中入栈到出栈的过程
+- **程序计数器：** 一块较小的内存空间，可以看作是当前线程所执行的字节码的行号指示器
+- **虚拟机栈：** 里面的元素叫栈帧，**存储局部变量表、操作栈、动态链接、方法返回地址**等，方法被调用到执行完成的过程对应一个栈帧在虚拟机栈中入栈到出栈的过程
 - **本地方法栈：** 和虚拟机栈的区别在于虚拟机栈为虚拟机执行Java方法，本地方法栈为虚拟机使用到的本地Native方法服务
 
 **线程共享数据区：**
 
 - **方法区：** 可以描述为堆的一个逻辑部分，或者说使用永久代来实现方法区。存储已被虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码等数据
 - **堆：** 唯一目的就是存放对象的实例，是垃圾回收管理器的主要区域，分为Eden、From/To Survivor空间
+- **元数据区**：常量池、方法元信息、
 
 
 
@@ -796,6 +797,12 @@ GC Roots 是一组必须活跃的引用。用通俗的话来说，就是程序�
 
 
 
+#### 分区收集
+
+
+
+
+
 ## GC垃圾收集器
 
 ![收集器](images/JVM/收集器.jpg)
@@ -872,23 +879,30 @@ Parallel Old 收集器是 Parallel Scavenge 的老年代版本，追求 CPU 吞�
 
 **主要流程如下**：
 
-- 初始标记(CMS initial mark)
-- 并发标记(CMS concurrenr mark)
-- 重新标记(CMS remark)
-- 并发清除(CMS concurrent sweep)
+- **初始标记(CMS initial mark)**：仅标记出GC Roots能直接关联到的对象。需要Stop-the-world
+- **并发标记(CMS concurrenr mark)**：进行GC Roots遍历的过程，寻找出所有可达对象
+- **重新标记(CMS remark)**：修正并发标记期间因用户程序继续运作而导致标记产生变动的那一部分对象的标记记录。需要Stop-the-world
+- **并发清除(CMS concurrent sweep)**：清出垃圾
 
 
 
-**优点**：
+**CMS触发机制**：当老年代的使用率达到80%时，就会触发一次CMS GC。
+
+- `-XX:CMSInitiatingOccupancyFraction=80`
+- `-XX:+UseCMSInitiatingOccupancyOnly`
+
+
+
+**优点**
 
 - 并发收集
 - 停顿时间最短
 
-**缺点**：
+**缺点**
 
-- 并发收集占据一定CPU资源，导致程序GC过程中变慢（吞吐量下降）
-- 无法处理浮动垃圾，可能出现”Concurrent Mode Failure“失败而导致另一次Full GC
-- 因为基于”标记-清除算法“导致空间碎片过多，可能因此在分配对象时引起另一次GC
+- 并发收集**占据一定CPU资源**，导致程序GC过程中变慢（吞吐量下降）
+- **无法处理浮动垃圾**，可能出现”Concurrent Mode Failure“失败而导致另一次Full GC
+- 因为基于”**标记-清除算法**“导致空间碎片过多，可能因此在分配对象时引起另一次GC
 
 
 
@@ -904,16 +918,54 @@ Parallel Old 收集器是 Parallel Scavenge 的老年代版本，追求 CPU 吞�
 
 #### G1收集器
 
+G1收集器中的堆内存被划分为多个大小相等的内存块（Region），每个Region是逻辑连续的一段内存，结构如下：
+
+![G1-Region](images/JVM/G1-Region.png)
+
+每个Region被标记了E、S、O和H，说明每个Region在运行时都充当了一种角色，其中H是以往算法中没有的，它代表Humongous（巨大的），这表示这些Region存储的是巨型对象（humongous object，H-obj），当新建对象大小超过Region大小一半时，直接在新的一个或多个连续Region中分配，并标记为H。
+
+
+
+**Region**
+
+堆内存中一个Region的大小可以通过 `-XX:G1HeapRegionSize`参数指定，大小区间只能是1M、2M、4M、8M、16M和32M，总之是2的幂次方。如果G1HeapRegionSize为默认值，则在堆初始化时计算Region的实际大小，默认把堆内存按照2048份均分，最后得到一个合理的大小。
+
+
+
+**GC模式**
+
+- **young gc**
+
+  发生在年轻代的GC算法，一般对象（除了巨型对象）都是在eden region中分配内存，当所有eden region被耗尽无法申请内存时，就会触发一次young gc，这种触发机制和之前的young gc差不多，执行完一次young gc，活跃对象会被拷贝到survivor region或者晋升到old region中，空闲的region会被放入空闲列表中，等待下次被使用。
+
+  - `-XX:MaxGCPauseMillis`：设置G1收集过程目标时间，默认值`200ms`
+  - `-XX:G1NewSizePercent`：新生代最小值，默认值`5%`
+  - `-XX:G1MaxNewSizePercent`：新生代最大值，默认值`60%`
+
+- **mixed gc**
+
+  当越来越多的对象晋升到老年代old region时，为了避免堆内存被耗尽，虚拟机会触发一个混合的垃圾收集器，即mixed gc，该算法并不是一个old gc，除了回收整个young region，还会回收一部分的old region，这里需要注意：**是一部分老年代，而不是全部老年代**，可以选择哪些old region进行收集，从而可以对垃圾回收的耗时时间进行控制
+
+- **full gc**
+  
+  - 如果对象内存分配速度过快，mixed gc来不及回收，导致老年代被填满，就会触发一次full gc，G1的full gc算法就是单线程执行的serial old gc，会导致异常长时间的暂停时间，需要进行不断的调优，尽可能的避免full gc
+
+
+
 **G1垃圾回收器** 应用于大的堆内存空间。它将堆内存空间划分为不同的区域，对各个区域并行地做回收工作。G1在回收内存空间后还立即对空闲空间做整合工作以减少碎片。CMS却是在全部停止(stop the world,STW)时执行内存整合工作。对于不同的区域G1根据垃圾的数量决定优先级。使用 `-XX:UseG1GCJVM` 参数来开启使用G1垃圾回收器。
 
 ![G1收集器](images/JVM/G1收集器.jpg)
 
 **主要流程如下**：
 
-- 初始标记(Initial Marking)
-- 并发标记(Concurrenr Marking)
-- 最终标记(Final Marking)
-- 筛选回收(Live Data Counting And Evacution)
+- 初始标记(Initial Marking)：标记从GC Root可达的对象。会发生STW
+- 并发标记(Concurrenr Marking)：标记出GC Root可达对象衍生出去的存活对象，并收集各个Region的存活对象信息。整个过程gc collector线程与应用线程可以并行执行
+- **最终标记(Final Marking)**：标记出在并发标记过程中遗漏的，或内部引用发生变化的对象。会发生STW
+- 筛选回收(Live Data Counting And Evacution)：垃圾清除过程，如果发现一个Region中没有存活对象，则把该Region加入到空闲列表中
+
+
+
+ `-XX:InitiatingHeapOccupancyPercent`：当老年代大小占整个堆大小百分比达到该阈值时，会触发一次mixed gc。
 
 
 
