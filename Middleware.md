@@ -322,14 +322,25 @@ expires字典会保存所有设置了过期时间的key的过期时间数据，�
 
 ## 内存淘汰策略
 
-Redis的内存淘汰策略是指在Redis的用于缓存的内存不足时，怎么处理需要新写入且需要申请额外空间的数据。
+Redis达到最大内存限制时(`maxmemory`)，Redis根据配置文件redis.conf中配置的 `maxmemory-policy` 的策略，来决定具体的行为。
 
-- **volatile-lru**：从已设置过期时间的数据集（server.db[i].expires）中挑选**最近最少使用**的数据淘汰
-- **volatile-ttl**：从已设置过期时间的数据集（server.db[i].expires）中挑选**将要过期**的数据淘汰
-- **volatile-random**：从已设置过期时间的数据集（server.db[i].expires）中**任意选择**数据淘汰
-- **allkeys-lru**：从数据集（server.db[i].dict）中挑选**最近最少使用**的数据淘汰
-- **allkeys-random**：从数据集（server.db[i].dict）中**任意选择数**据淘汰
-- **no-enviction（驱逐）**：禁止驱逐数据，**不删除**的意思
+```properties
+# 配置最大内存限制
+maxmemory 1000mb
+# 配置淘汰策略
+maxmemory-policy volatile-lru
+```
+
+支持的淘汰策略包括：
+
+- **volatile-lru**：从已设置过期时间的数据集中挑选**最近最少使用**的数据淘汰（淘汰**最长时间**没有被使用）
+- **volatile-lfu**：从已设置过期时间的数据集中挑选某段时间内**最近最不经常**的数据淘汰（淘汰一段时间内**使用次数**最少）
+- **volatile-ttl**：从已设置过期时间的数据集中挑选**将要过期**的数据淘汰
+- **volatile-random**：从已设置过期时间的数据集中**任意选择**数据淘汰
+- **allkeys-lru**：从所有数据集中挑选**最近最少使用**的数据淘汰
+- **allkeys-lfu**：从所有数据集中选择某段时间内内**最近最不经常**的数据淘汰
+- **allkeys-random**：从所有数据集中**任意选择数**据淘汰
+- **noenviction（驱逐）**： 不删除策略，达到最大内存限制时，如果需要更多内存，直接返回错误信息
 
 
 
