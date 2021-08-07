@@ -1764,6 +1764,41 @@ Java8 对 ConcurrentHashMap 进行了比较大的改动,Java8 也引入了红黑
 
 
 
+**ConcurrentHashMap在1.7和1.8的区别**
+
+- **整体结构**
+  - 1.7：`Segment + HashEntry + Unsafe`
+  - 1.8：移除Segment，使锁的粒度更小，`Synchronized + CAS + Node + Unsafe`
+
+- **put（）**
+
+  - 1.7：先定位Segment，再定位桶，put全程加锁，没有获取锁的线程提前找桶的位置，并最多自旋64次获取锁，超过则挂起
+    1. 定位Segment：先通过key的 `rehash值的高位` 和 `segments数组大小-1` 相与得到在 segments中的位置
+    2. 定位桶：然后在通过 `key的rehash值` 和 `table数组大小-1` 相与得到在table中的位置
+
+  - 1.8：由于移除了Segment，可根据 `rehash值` 直接定位到桶，拿到table[i]的 `首节点first`后进行判断：
+    1. 如果为 `null` ，通过 `CAS` 的方式把 value put进去
+    2. 如果 `非null` ，并且 `first.hash == -1` ，说明其他线程在扩容，参与一起扩容
+    3. 如果 `非null` ，并且 `first.hash != -1` ，Synchronized锁住 first节点，判断是链表还是红黑树，遍历插入。
+
+- **get（）**
+  - 1.7和1.8基本类似，由于value声明为volatile，保证了修改的可见性，因此不需要加锁
+
+- **resize（）**
+  - 1.7：与HashMap的 resize() 没太大区别，都是在 put() 元素时去做的扩容，所以在1.7中的实现是获得了锁之后，在单线程中去做扩容（1.`new个2倍数组`   2.`遍历old数组节点搬去新数组`），避免了HashMap在1.7中扩容时死循环的问题，保证线程安全
+  - 1.8：支持并发扩容，HashMap扩容在1.8中由头插改为尾插（为了避免死循环问题），ConcurrentHashmap也是，迁移也是从尾部开始，扩容前在桶的头部放置一个hash值为-1的节点，这样别的线程访问时就能判断是否该桶已经被其他线程处理过了
+
+- **size（）**
+  - 1.7：很经典的思路
+    1. 先采用不加锁的方式，计算两次，如果两次结果一样，说明是正确的，返回
+    2. 如果两次结果不一样，则把所有 segment 锁住，重新计算所有 segment的 `Count` 的和
+  - 1.8：由于没有segment的概念，所以只需要用一个 `baseCount` 变量来记录ConcurrentHashMap 当前 `节点的个数`。
+    1. 先尝试通过CAS 修改 `baseCount`
+    2. 如果多线程竞争激烈，某些线程CAS失败，那就CAS尝试将 `CELLSBUSY` 置1，成功则可以把 `baseCount变化的次数` 暂存到一个数组 `counterCells` 里，后续数组 `counterCells` 的值会加到 `baseCount` 中
+    3. 如果 `CELLSBUSY` 置1失败又会反复进行CAS`baseCount` 和 CAS`counterCells`数组
+
+
+
 ### ConcurrentSkipListMap
 
 ConcurrentSkipListMap是线程安全的有序的哈希表(相当于线程安全的TreeMap)。它继承于AbstractMap类，并且实现ConcurrentNavigableMap接口。ConcurrentSkipListMap是通过“跳表”来实现的，它支持并发。
@@ -3854,6 +3889,7 @@ AIO(异步非阻塞IO,即NIO.2)。异步IO模型中，用户线程直接使用�
 信号驱动式I/O是指进程预先告知内核，使得某个文件描述符上发生了变化时，内核使用信号通知该进程。在信号驱动式I/O模型，进程使用socket进行信号驱动I/O，并建立一个SIGIO信号处理函数，当进程通过该信号处理函数向内核发起I/O调用时，内核并没有准备好数据报，而是返回一个信号给进程，此时进程可以继续发起其他I/O调用。也就是说，在第一阶段内核准备数据的过程中，进程并不会被阻塞，会继续执行。当数据报准备好之后，内核会递交SIGIO信号，通知用户空间的信号处理程序，数据已准备好；此时进程会发起recvfrom的系统调用，这一个阶段与阻塞式I/O无异。也就是说，在第二阶段内核复制数据到用户空间的过程中，进程同样是被阻塞的。
 
 **信号驱动式I/O的整个过程图如下：**
+
 ![信号驱动式IO](images/JAVA/信号驱动式IO.png)
 
 **第一阶段（非阻塞）：**
