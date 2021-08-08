@@ -24,11 +24,9 @@ JAVA里面进行多线程通信的主要方式就是 `共享内存` 的方式，
 
 **指令重排序分类**
 
-- 编译器重排序
-  - 编译器优化重排序：编译器在不改变单线程程序语义（as-if-serial ）的前提下，可以重新安排语句的执行顺序
-- 处理器重排序
-  - 内存系统重排序：由于处理器使用缓存和读/写缓冲区，这使得加载和存储操作看上去可能是在乱序执行
-  - 指令级并行重排序：现代处理器采用了指令级并行技术（Instruction Level Parallelism，ILP）来将多条指令重叠执行。如果不存在数据依赖性，处理器可以改变语句对机器指令的执行顺序
+- **编译器优化的重排序**：编译器在不改变单线程程序语义的前提下，可以重新安排语句的执行顺序;
+- **指令级并行的重排序**：现代处理器采用了指令级并行技术来将多条指令重叠执行。如果不存在数据依赖性，处理器可以改变语句对应机器指令的执行顺序;
+- **内存系统的重排序**：由于处理器使用缓存和读/写缓冲区，这使得加载和存储操作看上去可能是在乱序执行的。
 
 **② 顺序一致性**
 
@@ -2844,6 +2842,103 @@ ThreadLocal常用的方法
 - get：获取当前线程变量，当前ThreadLocal作为索引
 - initialValue（钩子方法需要子类实现）：赖加载形式初始化线程本地变量，执行get时，发现线程本地变量为null，就会执行initialValue的内容
 - remove：清空当前线程的ThreadLocal索引与映射的元素
+
+
+
+### 底层结构
+
+![img](images/JAVA/007S8ZIlly1gh4fy6gvw0j30w0093jsu.jpg)
+
+
+
+### set流程
+
+![img](images/JAVA/007S8ZIlly1gh4ipc80hfj30w10hugo5.jpg)
+
+然后会判断一下：如果当前位置是空的，就初始化一个Entry对象放在位置i上；
+
+```java
+private void set(ThreadLocal<?> key, Object value) {
+    Entry[] tab = table;
+    int len = tab.length;
+    // 根据ThreadLocal对象的hash值，定位到table中的位置i
+    int i = key.threadLocalHashCode & (len - 1);
+    for (Entry e = tab[i];
+         e != null;
+         e = tab[i = nextIndex(i, len)]) {
+        ThreadLocal<?> k = e.get();
+        
+        // 如果位置i不为空，如果这个Entry对象的key正好是即将设置的key，那么就刷新Entry中的value
+        if (k == key) {
+            e.value = value;
+            return;
+        }
+        
+        // 如果当前位置是空的，就初始化一个Entry对象放在位置i上
+        if (k == null) {
+            replaceStaleEntry(key, value, i);
+            return;
+        }
+        
+        // 如果位置i的不为空，而且key不等于entry，那就找下一个空位置，直到为空为止
+    }
+    
+    tab[i] = new Entry(key, value);
+    int sz = ++size;
+    if (!cleanSomeSlots(i, sz) && sz >= threshold)
+        rehash();
+}
+```
+
+
+
+### get流程
+
+在get的时候，也会根据ThreadLocal对象的hash值，定位到table中的位置，然后判断该位置Entry对象中的key是否和get的key一致，如果不一致，就判断下一个位置，set和get如果冲突严重的话，效率还是很低的。
+
+```java
+private Entry getEntryAfterMiss(ThreadLocal<?> key, int i, Entry e) {
+    Entry[] tab = table;
+    int len = tab.length;
+    // get的时候一样是根据ThreadLocal获取到table的i值，然后查找数据拿到后会对比key是否相等  if (e != null && e.get() == key)。
+    while (e != null) {
+        ThreadLocal<?> k = e.get();
+        // 相等就直接返回，不相等就继续查找，找到相等位置。
+        if (k == key)
+            return e;
+        if (k == null)
+            expungeStaleEntry(i);
+        else
+            i = nextIndex(i, len);
+        e = tab[i];
+    }
+    return null;
+}
+```
+
+
+
+**如果想共享线程的ThreadLocal数据怎么办？**
+
+使用`InheritableThreadLocal`可以实现多个线程访问ThreadLocal的值，我们在主线程中创建一个`InheritableThreadLocal`的实例，然后在子线程中得到这个`InheritableThreadLocal`实例设置的值。
+
+
+
+### 内存泄露
+
+![img](images/JAVA/007S8ZIlly1gh4mkx8upjj30jz06m74u.jpg)
+
+ThreadLocal在保存的时候会把自己当做Key存在ThreadLocalMap中，正常情况应该是key和value都应该被外界强引用才对，但是现在key被设计成WeakReference弱引用了。
+
+![img](images/JAVA/007S8ZIlly1gh4nh8v3haj30w10bbabr.jpg)
+
+**弱引用**：只具有弱引用的对象拥有更短暂的生命周期，在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程，因此不一定会很快发现那些只具有弱引用的对象。
+
+这就导致了一个问题，ThreadLocal在没有外部强引用时，发生GC时会被回收，如果创建ThreadLocal的线程一直持续运行，那么这个Entry对象中的value就有可能一直得不到回收，发生内存泄露。
+
+**解决**：在finally中remove即可。
+
+**那为什么ThreadLocalMap的key要设计成弱引用？**key不设置成弱引用的话就会造成和entry中value一样内存泄漏的场景。
 
 
 
