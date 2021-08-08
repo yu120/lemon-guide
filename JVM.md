@@ -1142,6 +1142,20 @@ CMS垃圾收集器JVM参数最佳实践：
 
 
 
+**test、stage 环境jvm使用CMS 参数配置（jdk8）**
+
+```shell
+-server -Xms256M -Xmx256M -Xss512k -Xmn96M -XX:MetaspaceSize=128M -XX:MaxMetaspaceSize=128M -XX:InitialHeapSize=256M -XX:MaxHeapSize=256M  -XX:+PrintCommandLineFlags -XX:+UseConcMarkSweepGC -XX:+UseCMSInitiatingOccupancyOnly -XX:CMSInitiatingOccupancyFraction=80 -XX:+CMSClassUnloadingEnabled -XX:+CMSParallelRemarkEnabled -XX:+CMSScavengeBeforeRemark -XX:+UseCMSCompactAtFullCollection -XX:CMSFullGCsBeforeCompaction=2 -XX:+CMSParallelInitialMarkEnabled -XX:+CMSParallelRemarkEnabled -XX:+UnlockDiagnosticVMOptions -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:MaxTenuringThreshold=8  -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+PrintGC -XX:+PrintGCApplicationConcurrentTime -XX:+PrintGCApplicationStoppedTime -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintHeapAtGC  -XX:+PrintTenuringDistribution  -XX:SurvivorRatio=8 -Xloggc:../logs/gc.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=../dump
+```
+
+**online 环境jvm使用CMS参数配置（jdk8）**
+
+```shell
+-server -Xms4G -Xmx4G -Xss512k  -Xmn1536M -XX:MetaspaceSize=128M -XX:MaxMetaspaceSize=128M -XX:InitialHeapSize=4G -XX:MaxHeapSize=4G  -XX:+PrintCommandLineFlags -XX:+UseConcMarkSweepGC -XX:+UseCMSInitiatingOccupancyOnly -XX:CMSInitiatingOccupancyFraction=80 -XX:+CMSClassUnloadingEnabled -XX:+CMSParallelRemarkEnabled -XX:+CMSScavengeBeforeRemark -XX:+UseCMSCompactAtFullCollection -XX:CMSFullGCsBeforeCompaction=2 -XX:+CMSParallelInitialMarkEnabled -XX:+CMSParallelRemarkEnabled -XX:+UnlockDiagnosticVMOptions -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch -XX:MaxTenuringThreshold=10  -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+PrintGC -XX:+PrintGCApplicationConcurrentTime -XX:+PrintGCApplicationStoppedTime -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintHeapAtGC  -XX:+PrintTenuringDistribution  -XX:SurvivorRatio=8 -Xloggc:../logs/gc.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=../dump
+```
+
+
+
 ## GC场景
 
 ### Full GC场景
@@ -1464,18 +1478,17 @@ du -sh *
 
 ## CPU过高排查
 
-然后就是排查CPU的飙高的原因，**CPU飙高的排查都是直接找到对应CPU占比最高的进程，然后找到CPU最高的线程**。
+**排查过程**
 
-总结一下可能导致CPU标高的原因，可能是**一个GC线程频繁或者锁资源竞争频繁，线程数过多**等原因。
+- 使用`top`查找进程id
+- 使用`top -Hp <pid>`查找进程中耗cpu比较高的线程id
+- 使用`printf %x <pid>`将线程id十进制转十六进制
+- 使用` jstack -pid | grep -A 20 <pid>`过滤出线程id锁关联的栈信息
+- 根据栈信息中的调用链定位业务代码
 
-- **GC线程频繁**
-- **锁竞争频繁（自旋）**
 
-其中GC线程频繁，有可能是**大对象（对象过多），内存泄漏**等原因导致内存紧张一直在执行GC，但是每次执行的GC回收的垃圾都非常少。
 
-一般CPU紧张，都是线上实施排查，并且一般大厂都会有自己自研的监控平台，我们自己的监控平台，对于我们每台服务器的健康状况（健康分）、服务期内的应用（Mysql、Redis、Mq、Kafka、服务）都会进行实施的监控报警，所以一般都能都在出现问题前将问题解决掉。
-
-在线上之间也提到过可以使用**top**、**jstack**命令排查CPU飙高的问题。这里有一段案例代码如下：
+案例代码如下：
 
 ```java
 public class CPUSoaring {
@@ -1506,25 +1519,58 @@ public class CPUSoaring {
 }
 ```
 
-（1）首先通过**top**命令可以查看到id为**3806**的进程所占的CPU最高：
+- 第一步：首先通过**top**命令可以查看到id为**3806**的进程所占的CPU最高：
 
-![CPU过高排查-top](images/JVM/CPU过高排查-top.jpg)
+  ![CPU过高排查-top](images/JVM/CPU过高排查-top.jpg)
 
-（2）然后通过**top -Hp pid**命令，找到占用CPU最高的线程：
+- 第二步：然后通过**top -Hp pid**命令，找到占用CPU最高的线程：
 
-![CPU过高排查-top-Hp-pid](images/JVM/CPU过高排查-top-Hp-pid.jpg)
+  ![CPU过高排查-top-Hp-pid](images/JVM/CPU过高排查-top-Hp-pid.jpg)
 
-（3）接着通过：**printf '%x\n' tid**命令将线程的tid转换为十六进制：xid：
+- 第三步：接着通过：**printf '%x\n' tid**命令将线程的tid转换为十六进制：xid：
 
-![CPU过高排查-printf](images/JVM/CPU过高排查-printf.jpg)
+  ![CPU过高排查-printf](images/JVM/CPU过高排查-printf.jpg)
 
-（4）最后通过：**jstack pid|grep xid -A 30**命令就是输出线程的堆栈信息，线程所在的位置：
+- 第四步：最后通过：**jstack pid|grep xid -A 30**命令就是输出线程的堆栈信息，线程所在的位置：
 
-![CPU过高排查-jstack](images/JVM/CPU过高排查-jstack.jpg)
+  ![CPU过高排查-jstack](images/JVM/CPU过高排查-jstack.jpg)
 
-（5）还可以通过**jstack -l pid > 文件名称.txt** 命令将线程堆栈信息输出到文件，线下查看。
+- 第五步：还可以通过**jstack -l pid > 文件名称.txt** 命令将线程堆栈信息输出到文件，线下查看。
 
-这就是一个CPU飙高的排查过程，目的就是要**找到占用CPU最高的线程所在的位置**，然后就是**review**你的代码，定位到问题的所在。使用Arthas的工具排查也是一样的，首先要使用top命令找到占用CPU最高的Java进程，然后使用Arthas进入该进程内，**使用dashboard命令排查占用CPU最高的线程。**，最后通过**thread**命令线程的信息。
+  这就是一个CPU飙高的排查过程，目的就是要**找到占用CPU最高的线程所在的位置**，然后就是**review**你的代码，定位到问题的所在。使用Arthas的工具排查也是一样的，首先要使用top命令找到占用CPU最高的Java进程，然后使用Arthas进入该进程内，**使用dashboard命令排查占用CPU最高的线程。**，最后通过**thread**命令线程的信息。
+
+
+
+## 内存打满排查
+
+**排查过程**
+
+- 查找进程id：`top -d 2 -c`
+- 查看JVM堆内存分配情况：`jmap -heap pid`
+- 查看占用内存比较多的对象：`jmap -histo pid | head -n 100`
+- 查看占用内存比较多的存活对象：`jmap -histo:live pid | head -n 100`
+
+
+
+**示例**
+
+- 第一步：top -d 2 -c 
+
+  ![img](images/JVM/20200119164639576.png)
+
+- 第二步：jmap -heap 8338
+
+  ![img](images/JVM/20200119164641390.png)
+
+- 第三步：定位占用内存比价多的对象
+
+  ![img](images/JVM/20200119164633443.png)
+
+  这里就能看到对象个数以及对象大小……
+
+  ![img](images/JVM/20200119164640148.png)
+
+  这里看到一个自定义的类，这样我们就定位到具体对象，看看这个对象在那些地方有使用、为何会有大量的对象存在。
 
 
 
@@ -1605,6 +1651,137 @@ class OOM {
 每次自己写完代码，自己检查后，都可以提交给比自己高级别的工程师**review**自己的代码，就能及时的发现代码的问题，基本上代码没问题，百分之九十以上的问题都能避免，这也是大厂注重代码质量，并且时刻**review**代码的习惯。
 
 
+
+## Jvisualvm
+
+项目频繁YGC 、FGC问题排查
+
+### 内存问题
+
+对象内存占用、实例个数监控
+
+![img](images/JVM/20200119164751943.png)
+
+
+对象内存占用、年龄值监控
+
+![img](images/JVM/2020011916475242.png)
+
+
+通过上面两张图发现这些对象占用内存比较大而且存活时间也是比较常，所以survivor 中的空间被这些对象占用，而如果缓存再次刷新则会创建同样大小对象来替换老数据，这时发现eden内存空间不足，就会触发yonggc 如果yonggc 结束后发现eden空间还是不够则会直接放到老年代，所以这样就产生了大对象的提前晋升，导致fgc增加……
+
+**优化办法**：优化两个缓存对象，将缓存对象大小减小。优化一下两个对象，缓存关键信息！
+
+
+
+### CPU耗时问题排查
+
+Cpu使用耗时监控：
+
+![img](images/JVM/20200119164752266.png)
+
+耗时、调用次数监控：
+
+![img](images/JVM/20200119164749513.png)
+
+从上面监控图可以看到主要耗时还是在网络请求，没有看到具体业务代码消耗过错cpu……
+
+
+
+## 调优堆内存分配
+
+**初始堆空间大小设置**
+
+- 使用系统默认配置在系统稳定运行一段时间后查看记录内存使用情况：Eden、survivor0 、survivor1 、old、metaspace
+- 按照通用法则通过gc信息分配调整大小，整个堆大小是Full GC后老年代空间占用大小的3-4倍
+- 老年代大小为Full GC后老年代空间占用大小的2-3倍
+- 新生代大小为Full GC后老年代空间占用大小的1-1.5倍 
+- 元数据空间大小为Full GC后元数据空间占用大小的1.2-1.5倍
+
+活跃数大小是应用程序运行在稳定态时，长期存活的对象在java堆中占用的空间大小。也就是在应用趋于稳太时FullGC之后Java堆中存活对象占用空间大小。（注意在jdk8中将jdk7中的永久代改为元数据区，metaspace 使用的物理内存，不占用堆内存）
+
+
+
+**堆大小调整的着手点、分析点**
+
+- 统计Minor GC 持续时间
+- 统计Minor GC 的次数
+- 统计Full GC的最长持续时间
+- 统计最差情况下Full GC频率
+- 统计GC持续时间和频率对优化堆的大小是主要着手点，我们按照业务系统对延迟和吞吐量的需求，在按照这些分析我们可以进行各个区大小的调整
+
+
+
+## 年轻代调优
+
+**年轻代调优规则**
+
+- 老年代空间大小不应该小于活跃数大小1.5倍。老年代空间大小应为老年代活跃数2-3倍
+- 新生代空间至少为java堆内存大小的10% 。新生代空间大小应为1-1.5倍的老年代活跃数
+- 在调小年轻代空间时应保持老年代空间不变
+
+
+
+MinorGC是收集eden+from survivor 区域的，当业务系统匀速生成对象的时候如果年轻带分配内存偏小会发生频繁的MinorGC，如果分配内存过大则会导致MinorGC停顿时间过长，无法满足业务延迟性要求。所以按照堆分配空间分配之后分析gc日志，看看MinorGC的频率和停顿时间是否满足业务要求。
+
+- **MinorGC频繁原因**
+  MinorGC 比较频繁说明eden内存分配过小，在恒定的对象产出的情况下很快无空闲空间来存放新对象所以产生了MinorGC,所以eden区间需要调大。
+
+- **年轻代大小调整**
+  Eden调整到多大那，我们可以查看GC日志查看业务多长时间填满了eden空间，然后按照业务能承受的收集频率来计算eden空间大小。比如eden空间大小为128M每5秒收集一次，则我们为了达到10秒收集一次则可以调大eden空间为256M这样能降低收集频率。年轻代调大的同时相应的也要调大老年代，否则有可能会出现频繁的concurrent model  failed  从而导致Full GC 。
+
+- **MinorGC停顿时间过长**
+  MinorGC 收集过程是要产生STW的。如果年轻代空间太大，则gc收集时耗时比较大，所以我们按业务对停顿的要求减少内存，比如现在一次MinorGC 耗时12.8毫秒，eden内存大小192M ,我们为了减少MinorGC 耗时我们要减少内存。比如我们MinorGC 耗时标准为10毫秒，这样耗时减少16.6% 同样年轻代内存也要减少16.6% 即192*0.1661 = 31.89M 。年轻代内存为192-31.89=160.11M,在减少年轻代大小，而要保持老年代大小不变则要减少堆内存大小至512-31.89=480.11M
+
+
+
+堆内存：512M 年轻代: 192M  收集11次耗时141毫秒 12.82毫秒/次
+
+![img](images/JVM/20200119164911457.png)
+
+堆内存：512M 年轻代：192M 收集12次耗时151毫秒   12.85毫秒/次
+
+![img](images/JVM/20200119164911559.png)
+
+**按照上面计算调优**
+堆内存： 480M 年轻带： 160M 收集14次 耗时154毫秒  11毫秒/次 相比之前的 12.82毫秒/次 停顿时间减少1.82毫秒
+
+![img](images/JVM/20200119164911817.png)
+
+**但是还没达到10毫秒的要求，继续按照这样的逻辑进行  11-10=1 ；1/11= 0.909 即 0.09 所以耗时还要降低9%。**
+年轻代减少：160*0.09 = 14.545=14.55 M;  160-14.55 =145.45=145M 
+堆大小： 480-14.55 = 465.45=465M
+但是在这样调整后使用jmap -heap 查看的时候年轻代大小和实际配置数据有出入（年轻代大小为150M大于配置的145M），这是因为-XX:NewRatio 默认2 即年轻代和老年代1：2的关系，所以这里将-XX:NewRatio 设置为3 即年轻代、老年大小比为1：3 ，最终堆内存大小为：
+
+![img](images/JVM/20200119164913228.png)
+
+MinorGC耗时 159/16=9.93毫秒
+
+![img](images/JVM/20200119164912847.png)
+
+MinorGC耗时 185/18=10.277=10.28毫秒
+
+![img](images/JVM/2020011916490666.png)
+
+MinorGC耗时 205/20=10.25毫秒
+
+![img](images/JVM/20200119164912355.png)
+
+
+Ok 这样MinorGC停顿时间过长问题解决，MinorGC要么比较频繁要么停顿时间比较长，解决这个问题就是调整年轻代大小，但是调整的时候还是要遵守这些规则。
+
+
+
+## 老年代调优
+按照同样的思路对老年代进行调优，同样分析FullGC 频率和停顿时间，按照优化设定的目标进行老年代大小调整。
+
+**老年代调优流程**
+
+- 分析每次MinorGC 之后老年代空间占用变化，计算每次MinorGC之后晋升到老年代的对象大小
+- 按照MinorGC频率和晋升老年代对象大小计算提升率即每秒钟能有多少对象晋升到老年代
+- FullGC之后统计老年代空间被占用大小计算老年带空闲空间，再按照第2部计算的晋升率计算该老年代空闲空间多久会被填满而再次发生FullGC，同样观察FullGC 日志信息，计算FullGC频率，如果频率过高则可以增大老年代空间大小老解决，增大老年代空间大小应保持年轻代空间大小不变
+- 如果在FullGC 频率满足优化目标而停顿时间比较长的情况下可以考虑使用CMS、G1收集器。并发收集减少停顿时间
+  
 
 ## 栈溢出
 

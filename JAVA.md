@@ -1723,6 +1723,261 @@ LinkedHashMap 是 HashMap 的一个子类，保存了记录的插入顺序，在
 
 
 
+**如何实现LRUCache？**
+
+LRU（Least Recently Used）**最近最少使用算法**。LruCache就是利用 LinkedHashMap 的一个特性（ `accessOrder＝true`基于访问顺序 ）再加上对 LinkedHashMap 的`数据操作上锁`实现的缓存策略。
+
+- `LruCache`是通过`LinkedHashMap`构造方法的第三个参数的`accessOrder=true`实现了`LinkedHashMap`的数据排序基于访问顺序 （最近访问的数据会在链表尾部），在容量溢出的时候，将链表头部的数据移除，从而实现了LRU数据缓存机制
+- 然后在每次 `LruCache.get(K key)` 方法里都会调用`LinkedHashMap.get(Object key)`
+- 如上述设置了 `accessOrder=true` 后，每次 `LinkedHashMap.get(Object key)`都会进行 `LinkedHashMap.makeTail(LinkedEntry<K, V> e)`
+- LinkedHashMap 是`双向循环链表`，然后每次 `LruCache.get -> LinkedHashMap.get` 的数据就被放到最末尾了
+- 在 put 和 `trimToSize` 的方法执行下，如果发生数据量移除，会优先移除掉最前面的数据（因为最新访问的数据在尾部）
+
+- LruCache 在内部的get、put、remove包括 trimToSize 都是安全的（因为都上锁了）
+- LruCache 自身并没有释放内存，将LinkedHashMap的数据移除了，如果数据还在别的地方被引用了，还是有泄漏问题，还需要手动释放内存
+- 覆写entryRemoved方法能知道 LruCache 数据移除时是否发生了冲突，也可以去手动释放资源
+- maxSize 和 sizeOf(K key, V value) 方法的覆写息息相关，必须相同单位。（ 比如 maxSize 是7MB，自定义的 sizeOf 计算每个数据大小的时候必须能算出与MB之间有联系的单位 ）
+
+
+
+
+#### LruCache的唯一构造方法
+
+```java
+/**
+ * LruCache的构造方法：需要传入最大缓存个数
+ */
+public LruCache(int maxSize) {
+
+    ...
+
+    this.maxSize = maxSize;
+    /*
+     * 初始化LinkedHashMap
+     * 第一个参数：initialCapacity，初始大小
+     * 第二个参数：loadFactor，负载因子=0.75f，即到75%容量的时候就会扩容
+     * 第三个参数：①accessOrder=true基于访问顺序排序②accessOrder=false基于插入顺序排序
+     */
+    this.map = new LinkedHashMap<K, V>(0, 0.75f, true);
+}
+```
+
+
+
+#### LruCache.get(K key)
+
+下述的 get 方法表面并没有看出哪里有实现了 LRU 的缓存策略。主要在 mapValue = map.get(key);里，调用了 LinkedHashMap 的 get 方法，再加上 LruCache 构造里默认设置 LinkedHashMap 的 accessOrder=true。
+
+```java
+/**
+ * 根据 key 查询缓存，如果存在于缓存或者被 create 方法创建了。
+ * 如果值返回了，那么它将被移动到双向循环链表的的尾部。
+ * 如果如果没有缓存的值，则返回 null。
+ */
+public final V get(K key) {
+
+    ...
+
+    V mapValue;
+    synchronized (this) {
+        // 关键点：LinkedHashMap每次get都会基于访问顺序来重整数据顺序
+        mapValue = map.get(key);
+        // 计算 命中次数
+        if (mapValue != null) {
+            hitCount++;
+            return mapValue;
+        }
+        // 计算 丢失次数
+        missCount++;
+    }
+
+    /*
+     * 官方解释：
+     * 尝试创建一个值，这可能需要很长时间，并且Map可能在create()返回的值时有所不同。如果在create()执行的时
+     * 候，一个冲突的值被添加到Map，我们在Map中删除这个值，释放被创造的值。
+     */
+    V createdValue = create(key);
+    if (createdValue == null) {
+        return null;
+    }
+
+    /***************************
+     * 不覆写create方法走不到下面 *
+     ***************************/
+
+    /*
+     * 正常情况走不到这里
+     * 走到这里的话 说明 实现了自定义的 create(K key) 逻辑
+     * 因为默认的 create(K key) 逻辑为null
+     */
+    synchronized (this) {
+        // 记录 create 的次数
+        createCount++;
+        // 将自定义create创建的值，放入LinkedHashMap中，如果key已经存在，会返回 之前相同key 的值
+        mapValue = map.put(key, createdValue);
+
+        // 如果之前存在相同key的value，即有冲突。
+        if (mapValue != null) {
+            /*
+             * 有冲突
+             * 所以 撤销 刚才的 操作
+             * 将 之前相同key 的值 重新放回去
+             */
+            map.put(key, mapValue);
+        } else {
+            // 拿到键值对，计算出在容量中的相对长度，然后加上
+            size += safeSizeOf(key, createdValue);
+        }
+    }
+
+    // 如果上面 判断出了 将要放入的值发生冲突
+    if (mapValue != null) {
+        /*
+         * 刚才create的值被删除了，原来的 之前相同key 的值被重新添加回去了
+         * 告诉 自定义 的 entryRemoved 方法
+         */
+        entryRemoved(false, key, createdValue, mapValue);
+        return mapValue;
+    } else {
+        // 上面 进行了 size += 操作 所以这里要重整长度
+        trimToSize(maxSize);
+        return createdValue;
+    }
+}
+```
+
+
+
+#### LinkedHashMap.get(Object key)
+
+主要看`if (accessOrder)`逻辑即可，如果`accessOrder=true`那么每次get都会执行N次 `makeTail(LinkedEntry<K, V> e)` 。多了一步mainTail动作，把获取的数据，移到双向链表的尾部tail。
+
+```java
+/**
+ * Returns the value of the mapping with the specified key.
+ *
+ * @param key the key.
+ * @return the value of the mapping with the specified key, or {@code null} if no mapping for the specified key is found.
+ */
+@Override
+public V get(Object key) {
+        /*
+         * This method is overridden to eliminate the need for a polymorphic
+         * invocation in superclass at the expense of code duplication.
+         */
+        if (key == null) {
+            HashMapEntry<K, V> e = entryForNullKey;
+            if (e == null)
+                return null;
+            if (accessOrder)
+                makeTail((LinkedEntry<K, V>) e); //把访问的节点迁移到链表的尾部
+            return e.value;
+        }
+
+        int hash = Collections.secondaryHash(key);
+        HashMapEntry<K, V>[] tab = table;
+        for (HashMapEntry<K, V> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) { //从数组中获取
+            K eKey = e.key;
+            if (eKey == key || (e.hash == hash && key.equals(eKey))) {
+                if (accessOrder)
+                    makeTail((LinkedEntry<K, V>) e); //把访问的节点迁移到链表尾部。
+                return e.value;
+            }
+        }
+        return null;
+}
+
+/**
+  * Relinks the given entry to the tail of the list. Under access ordering,
+  * this method is invoked whenever the value of a  pre-existing entry is
+  * read by Map.get or modified by Map.put.
+  */
+private void makeTail(LinkedEntry<K, V> e) {
+        // Unlink e 在链表中删除该节点e
+        e.prv.nxt = e.nxt;
+        e.nxt.prv = e.prv;
+
+        // Relink e as tail 在尾部添加
+        LinkedEntry<K, V> header = this.header;
+        LinkedEntry<K, V> oldTail = header.prv;
+        e.nxt = header;
+        e.prv = oldTail;
+        oldTail.nxt = header.prv = e;
+        modCount++;
+}
+```
+
+
+
+#### LruCache.put(K key, V value)
+
+```java
+public final V put(K key, V value) {
+    ...
+    synchronized (this) {
+        ...
+        // 拿到键值对，计算出在容量中的相对长度，然后加上
+        size += safeSizeOf(key, value);
+        ...
+    }
+	...
+    trimToSize(maxSize);
+    return previous;
+}
+```
+
+注意：
+
+- `put` 开始的时候确实是把值放入 `LinkedHashMap` 了，不管超不超过你设定的缓存容量
+- 然后根据 `safeSizeOf` 方法计算 此次添加数据的容量是多少，并且加到 `size` 里
+- 说到 `safeSizeOf` 就要讲到 `sizeOf(K key, V value)` 会计算出此次添加数据的大小
+- 直到 `put` 要结束时，进行了 `trimToSize` 才判断 `size` 是否 大于 `maxSize` 然后进行最近很少访问数据的移除
+
+
+
+#### LruCache.trimToSize(int maxSize)
+
+会判断之前 `size` 是否大于 `maxSize` 。是的话，直接跳出后什么也不做。不是的话，证明已经溢出容量了。由 `makeTail` 图已知，最近经常访问的数据在最末尾。拿到一个存放 key 的 Set，然后一直一直从头开始删除，删一个判断是否溢出，直到没有溢出。
+
+```java
+public void trimToSize(int maxSize) {
+    /*
+     * 这是一个死循环，
+     * 1.只有 扩容 的情况下能立即跳出
+     * 2.非扩容的情况下，map的数据会一个一个删除，直到map里没有值了，就会跳出
+     */
+    while (true) {
+        K key;
+        V value;
+        synchronized (this) {
+            // 在重新调整容量大小前，本身容量就为空的话，会出异常的。
+            if (size < 0 || (map.isEmpty() && size != 0)) {
+                throw new IllegalStateException(getClass().getName() + ".sizeOf() is reporting inconsistent results!");
+            }
+            // 如果是 扩容 或者 map为空了，就会中断，因为扩容不会涉及到丢弃数据的情况
+            if (size <= maxSize || map.isEmpty()) {
+                break;
+            }
+
+            Map.Entry<K, V> toEvict = map.entrySet().iterator().next();
+            key = toEvict.getKey();
+            value = toEvict.getValue();
+            map.remove(key);
+            // 拿到键值对，计算出在容量中的相对长度，然后减去。
+            size -= safeSizeOf(key, value);
+            // 添加一次收回次数
+            evictionCount++;
+        }
+        /*
+         * 将最后一次删除的最少访问数据回调出去
+         */
+        entryRemoved(true, key, value, null);
+    }
+}
+```
+
+
+
 ### ConcurrentHashMap
 
 ConcurrentHashMap是线程安全的哈希表(相当于线程安全的HashMap)；它继承于AbstractMap类，并且实现ConcurrentMap接口。ConcurrentHashMap是通过“锁分段”来实现的，它支持并发。
