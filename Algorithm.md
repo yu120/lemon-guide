@@ -575,7 +575,7 @@ public class Stack<E> extends Vector<E> {
 
 #### 树的遍历
 
-**① 前序遍历（Preorder Traversal）**
+##### 前序遍历(Preorder Traversal)
 
 **实现原理**：`先访问根节点，然后访问左子树，最后访问右子树`。
 
@@ -583,9 +583,36 @@ public class Stack<E> extends Vector<E> {
 
 ![前序遍历](images/Algorithm/前序遍历.gif)
 
+```java
+// 递归实现
+public void preOrderTraverse1(TreeNode root) {
+        if (root != null) {
+            System.out.print(root.val + "->");
+            preOrderTraverse1(root.left);
+            preOrderTraverse1(root.right);
+        }
+}
+
+// 非递归实现
+public void preOrderTraverse2(TreeNode root) {
+        Stack<TreeNode> stack = new Stack<>();
+        TreeNode node = root;
+        while (node != null || !stack.empty()) {
+            if (node != null) {
+                System.out.print(node.val + "->");
+                stack.push(node);
+                node = node.left;
+            } else {
+                TreeNode tem = stack.pop();
+                node = tem.right;
+            }
+        }
+}
+```
 
 
-**② 中序遍历（Inorder Traversal）**
+
+##### 中序遍历(Inorder Traversal)
 
 **实现原理**：`先访问左子树，然后访问根节点，最后访问右子树`。
 
@@ -593,15 +620,101 @@ public class Stack<E> extends Vector<E> {
 
 ![中序遍历](images/Algorithm/中序遍历.gif)
 
+```java
+// 递归实现
+public void inOrderTraverse(TreeNode root) {
+        if (root != null) {
+            inOrderTraverse(root.left);
+            System.out.print(root.val + "->");
+            inOrderTraverse(root.right);
+        }
+}
+
+// 非递归实现
+public void inOrderTraverse(TreeNode root) {
+        Stack<TreeNode> stack = new Stack<>();
+        TreeNode node = root;
+        while (node != null || !stack.isEmpty()) {
+            if (node != null) {
+                stack.push(node);
+                node = node.left;
+            } else {
+                TreeNode tem = stack.pop();
+                System.out.print(tem.val + "->");
+                node = tem.right;
+            }
+        }
+}
+```
 
 
-**③ 后序遍历（Postorder Traversal）**
+
+##### 后序遍历(Postorder Traversal)
 
 **实现原理**：`先访问左子树，然后访问右子树，最后访问根节点`。
 
 **应用场景**：在对某个节点进行分析的时候，需要来自左子树和右子树的信息。收集信息的操作是从树的底部不断地往上进行，好比你在修剪一棵树的叶子，修剪的方法是从外面不断地往根部将叶子一片片地修剪掉。
 
 ![后序遍历](images/Algorithm/后序遍历.gif)
+
+```java
+// 递归实现
+public void postOrderTraverse(TreeNode root) {
+        if (root != null) {
+            postOrderTraverse(root.left);
+            postOrderTraverse(root.right);
+            System.out.print(root.val + "->");
+        }
+}
+
+// 非递归实现
+public void postOrderTraverse(TreeNode root) {
+        TreeNode cur, pre = null;
+
+        Stack<TreeNode> stack = new Stack<>();
+        stack.push(root);
+
+        while (!stack.empty()) {
+            cur = stack.peek();
+            if ((cur.left == null && cur.right == null) || (pre != null && (pre == cur.left || pre == cur.right))) {
+                System.out.print(cur.val + "->");
+                stack.pop();
+                pre = cur;
+            } else {
+                if (cur.right != null)
+                    stack.push(cur.right);
+                if (cur.left != null)
+                    stack.push(cur.left);
+            }
+        }
+}
+```
+
+
+
+##### 层次遍历
+
+```java
+public void levelOrderTraverse(TreeNode root) {
+        if (root == null) {
+            return;
+        }
+    
+        Queue<TreeNode> queue = new LinkedList<TreeNode>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            TreeNode node = queue.poll();
+            System.out.print(node.val + "->");
+
+            if (node.left != null) {
+                queue.add(node.left);
+            }
+            if (node.right != null) {
+                queue.add(node.right);
+            }
+        }
+}
+```
 
 
 
