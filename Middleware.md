@@ -105,6 +105,8 @@ org.springframework.boot.env.YamlPropertySourceLoader
 - **Set：** 去重、赞、踩、共同好友等
 - **Zset：** 访问量排行榜、点击量排行榜等
 
+![img](images/Middleware/1289934-20190621163930814-1395015700.png)
+
 ### String(字符串)
 
 String 数据结构是简单的 key-value 类型，value 不仅可以是 String，也可以是数字（当数字类型用 Long 可以表示的时候encoding 就是整型，其他都存储在 sdshdr 当做字符串）。
@@ -113,9 +115,17 @@ String 数据结构是简单的 key-value 类型，value 不仅可以是 String�
 
 ### Hash(字典)
 
+![img](images/Middleware/1289934-20190621232209365-1000366002.png)
+
 在 Memcached 中，我们经常将一些结构化的信息打包成 hashmap，在客户端序列化后存储为一个字符串的值（一般是 JSON 格式），比如用户的昵称、年龄、性别、积分等。这时候在需要修改其中某一项时，通常需要将字符串（JSON）取出来，然后进行反序列化，修改某一项的值，再序列化成字符串（JSON）存储回去。简单修改一个属性就干这么多事情，消耗必定是很大的，也不适用于一些可能并发操作的场合（比如两个并发的操作都需要修改积分）。而 Redis 的 Hash 结构可以使你像在数据库中 Update 一个属性一样只修改某一项属性值。
 
 - 存储、读取、修改用户属性
+
+实战场景：
+
+- 缓存： 经典使用场景，把常用信息，字符串，图片或者视频等信息放到redis中，redis作为缓存层，mysql做持久化层，降低mysql的读写压力
+- 计数器：redis是单线程模型，一个命令执行完才会执行下一个，同时数据可以一步落地到其他的数据源
+- session：常见方案spring session + redis实现session共享
 
 
 
@@ -126,9 +136,24 @@ List 说白了就是链表（redis 使用双端链表实现的 List），相信�
 - 微博 TimeLine
 - 消息队列
 
+![img](images/Middleware/1289934-20190621233618769-504231907.png)
+
+使用列表的技巧
+
+- lpush+lpop=Stack(栈)
+- lpush+rpop=Queue（队列）
+- lpush+ltrim=Capped Collection（有限集合）
+- lpush+brpop=Message Queue（消息队列）
+
+实战场景：
+
+- timeline：例如微博的时间轴，有人发布微博，用lpush加入时间轴，展示新的列表信息。
+
 
 
 ### Set(集合)
+
+![img](images/Middleware/1289934-20190622001013515-677922001.png)
 
 Set 就是一个集合，集合的概念就是一堆不重复值的组合。利用 Redis 提供的 Set 数据结构，可以存储一些集合性的数据。比如在微博应用中，可以将一个用户所有的关注人存在一个集合中，将其所有粉丝存在一个集合。因为 Redis 非常人性化的为集合提供了求交集、并集、差集等操作，那么就可以非常方便的实现如共同关注、共同喜好、二度好友等功能，对上面的所有集合操作，你还可以使用不同的命令选择将结果返回给客户端还是存集到一个新的集合中。
 
@@ -136,18 +161,102 @@ Set 就是一个集合，集合的概念就是一堆不重复值的组合。利�
 - 利用唯一性，可以统计访问网站的所有独立 IP
 - 好友推荐的时候，根据 tag 求交集，大于某个 threshold 就可以推荐
 
+实战场景;
+
+- 标签（tag）,给用户添加标签，或者用户给消息添加标签，这样有同一标签或者类似标签的可以给推荐关注的事或者关注的人
+- 点赞，或点踩，收藏等，可以放到set中实现
+
 
 
 ### Sorted Set(有序集合)
+
+![img](images/Middleware/1289934-20190622000959260-539243592.png)
 
 和Sets相比，Sorted Sets是将 Set 中的元素增加了一个权重参数 score，使得集合中的元素能够按 score 进行有序排列，比如一个存储全班同学成绩的 Sorted Sets，其集合 value 可以是同学的学号，而 score 就可以是其考试得分，这样在数据插入集合的时候，就已经进行了天然的排序。另外还可以用 Sorted Sets 来做带权重的队列，比如普通消息的 score 为1，重要消息的 score 为2，然后工作线程可以选择按 score 的倒序来获取工作任务。让重要的任务优先执行。
 
 - 带有权重的元素，比如一个游戏的用户得分排行榜
 - 比较复杂的数据结构，一般用到的场景不算太多
 
+实战场景：
+
+- 排行榜：有序集合经典使用场景。例如小说视频等网站需要对用户上传的小说视频做排行榜，榜单可以按照用户关注数，更新时间，字数等打分，做排行。
 
 
-## 数据结构
+
+## 特殊数据结构
+
+### HyperLogLog
+
+hyperloglog可用极小空间完成独立数统计。命令如下：
+
+| 命令                          | 作用                    |
+| ----------------------------- | ----------------------- |
+| pfadd key element ...         | 将所有元素添加到key中   |
+| pfcount key                   | 统计key的估算值(不精确) |
+| pgmerge new_key key1 key2 ... | 合并key至新key          |
+
+
+
+### Geo
+
+geo是地理空间位置。redis支持将geo信息存储到有序集合中，再通过geohash算法进行填充。命令如下：
+
+| 命令                                 | 作用                                  |
+| ------------------------------------ | ------------------------------------- |
+| geoadd key latitude longitude member | 添加成员位置(纬度、经度、名称)到key中 |
+| geopos key member ...                | 获取成员geo坐标                       |
+| geodist key member1 member2          | 计算成员位置间距离                    |
+| georadius                            | 基于经纬度坐标范围查询                |
+| georadiusbymember                    | 基于成员位置范围查询                  |
+| geohash                              | 计算经纬度hash                        |
+
+
+
+### Pub/Sub
+
+发布订阅类似于广播功能。redis发布订阅包括 发布者、订阅者、Channel。常用命令如下：
+
+| 命令                    | 作用                               | 时间复杂度                                                   |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| subscribe channel       | 订阅一个频道                       | O(n)                                                         |
+| unsubscribe channel ... | 退订一个/多个频道                  | O(n)                                                         |
+| publish channel msg     | 将信息发送到指定的频道             | O(n+m)，n 是频道 channel 的订阅者数量, M 是使用模式订阅(subscribed patterns)的客户端的数量 |
+| pubsub CHANNELS         | 查看订阅与发布系统状态(多种子模式) | O(n)                                                         |
+| psubscribe              | 订阅多个频道                       | O(n)                                                         |
+| unsubscribe             | 退订多个频道                       | O(n)                                                         |
+
+
+
+### bitmap
+
+bitmap是一串连续的2进制数字（0或1），每一位所在的位置为偏移(offset)，在bitmap上可执行AND, OR, XOR以及其它位操作。常用命令如下：
+
+| 命令                        | 作用                                                | 时间复杂度 |
+| --------------------------- | --------------------------------------------------- | ---------- |
+| setbit key offset val       | 给指定key的值的第offset赋值val                      | O(1)       |
+| getbit key offset           | 获取指定key的第offset位                             | O(1)       |
+| bitcount key start end      | 返回指定key中[start,end]中为1的数量                 | O(n)       |
+| bitop operation destkey key | 对不同的二进制存储数据进行位运算(AND、OR、NOT、XOR) | O(n)       |
+
+
+
+### Redis Module
+
+#### BloomFilter
+
+
+
+#### RedisSearch
+
+
+
+#### Redis-ML
+
+
+
+
+
+## 底层数据结构
 
 当然是为了追求速度，不同数据类型使用不同的数据结构速度才得以提升。每种数据类型都有一种或者多种数据结构来支撑，底层数据结构有 6 种。
 
@@ -155,7 +264,15 @@ Set 就是一个集合，集合的概念就是一堆不重复值的组合。利�
 
 
 
-### Redis hash字典
+### SDS(简单动态字符)
+
+字符串结构使用最广泛，通常我们用于缓存登陆后的用户信息，key = userId，value = 用户信息 JSON 序列化成字符串。C 语言中字符串的获取 「MageByte」的长度，要从头开始遍历，直到 「\0」为止，Redis 作为唯快不破的男人是不能忍受的。C 语言字符串结构与 SDS 字符串结构对比图如下所示：
+
+![img](images/Middleware/SDS简单动态字符.png)
+
+
+
+### hash表(字典)
 
 Redis 整体就是一个 哈希表来保存所有的键值对，无论数据类型是 5 种的任意一种。哈希表，本质就是一个数组，每个元素被叫做哈希桶，不管什么数据类型，每个桶里面的 entry 保存着实际具体值的指针。
 
@@ -177,15 +294,7 @@ Redis 整体就是一个 哈希表来保存所有的键值对，无论数据类�
 
 
 
-### SDS简单动态字符
-
-字符串结构使用最广泛，通常我们用于缓存登陆后的用户信息，key = userId，value = 用户信息 JSON 序列化成字符串。C 语言中字符串的获取 「MageByte」的长度，要从头开始遍历，直到 「\0」为止，Redis 作为唯快不破的男人是不能忍受的。C 语言字符串结构与 SDS 字符串结构对比图如下所示：
-
-![img](images/Middleware/SDS简单动态字符.png)
-
-
-
-### 双端列表
+### linkedList(双端列表)
 
 Redis List 数据类型通常被用于队列、微博关注人时间轴列表等场景。不管是先进先出的队列，还是先进后出的栈，双端列表都很好的支持这些特性。Redis 的链表实现的特性可以总结如下：
 
@@ -223,7 +332,7 @@ struct ziplist<T> {
 
 
 
-### skipList跳跃表
+### skipList(跳跃表)
 
 sorted set 类型的排序功能便是通过「跳跃列表」数据结构来实现。跳跃表（skiplist）是一种有序数据结构，它通过在每个节点中维持多个指向其他节点的指针，从而达到快速访问节点的目的。跳跃表支持平均 O（logN）、最坏 O（N）复杂度的节点查找，还可以通过顺序性操作来批量处理节点。跳表在链表的基础上，增加了多层级索引，通过索引位置的几个跳转，实现数据的快速定位，如下图所示：
 
@@ -307,6 +416,19 @@ rdbchecksum yes
 
 
 
+RDB（Redis DataBase）持久化方式：是指用数据集快照的方式半持久化模式记录 Redis 数据库的所有键值对，在某个时间点将数据写入一个临时文件，持久化结束后，用这个临时文件替换上次持久化的文件，达到数据恢复。
+
+- 优点
+  - 只有一个文件 dump.rdb，方便持久化。
+  - 容灾性好，一个文件可以保存到安全的磁盘。
+  - 性能最大化，fork 子进程来完成写操作，让主进程继续处理命令，所以是 IO 最大化。使用单独子进程来进行持久化，主进程不会进行任何 IO 操作，保证了 Redis的高性能。
+  - 相对于数据集大时，比 AOF 的启动效率更高。
+
+- 缺点
+  - 数据安全性低。RDB 是间隔一段时间进行持久化，如果持久化之间 Redis 发生故障，会发生数据丢失。所以这种方式更适合数据要求不严谨的时候
+
+
+
 ### AOF
 
 AOF 机制对每条写入命令作为日志，以 append-only 的模式写入一个日志文件中，因为这个模式是**只追加**的方式，所以没有任何磁盘寻址的开销，所以很快，有点像 Mysql 中的binlog，AOF更适合做热备。
@@ -339,6 +461,19 @@ AOF 机制对每条写入命令作为日志，以 append-only 的模式写入一
 - 配置牛逼点，合理配置Linux的内存分配策略，避免因为物理内存不足导致fork失败
 - Redis在执行`BGSAVE`和`BGREWRITEAOF`命令时，哈希表的负载因子>=5，而未执行这两个命令时>=1。目的是**尽量减少写操作**，避免不必要的内存写入操作
 - **哈希表的扩展因子**：哈希表已保存节点数量 / 哈希表大小。因子决定了是否扩展哈希表
+
+
+
+AOF(Append-only file)持久化方式：是指所有的命令行记录以 Redis 命令请求协议的格式完全持久化存储保存为 aof 文件。
+
+- 优点
+  - 数据安全，aof 持久化可以配置 appendfsync 属性，有 always，每进行一次命令操作就记录到 aof 文件中一次
+  - 通过 append 模式写文件，即使中途服务器宕机，可以通过 redis-check-aof 工具解决数据一致性问题
+  - AOF 机制的 rewrite 模式。AOF 文件没被 rewrite 之前（文件过大时会对命令进行合并重写），可以删除其中的某些命令（比如误操作的 flushall）
+
+- 缺点
+  - AOF 文件比 RDB 文件大，且恢复速度慢
+  - 数据集大的时候，比 RDB 启动效率低
 
 
 
@@ -402,6 +537,36 @@ Redis有两种过期策略，定期删除和惰性删除
 **Redis的内存淘汰机制?**
 
 当Redis内存快耗尽时，Redis会启动内存淘汰机制，将部分key清掉以腾出内存。
+
+
+
+## 常见问题
+
+https://mp.weixin.qq.com/s?__biz=MzIyODE5NjUwNQ==&mid=2653328521&idx=1&sn=97e4c97264a048ce13ba09fefa317b8c&chksm=f3879d7fc4f0146951090f16c267167cdcf584fe3caa885f9012ff2f8d4f1decbc8a5d8fb888&mpshare=1&scene=23&srcid=08175xQJR1aBzpGulVsfUIKO&sharer_sharetime=1629162636282&sharer_shareid=0f9991a2eb945ab493c13ed9bfb8bf4b&exportkey=A3IxBD6vssKPMBrFeRe474c%3D&pass_ticket=PR%2FK8afpsNEi%2BddqfJ7hs4AucApd5fjNtWZXpgb9L8YVYdX9SuEkeZYVHnTPPBgQ&wx_header=0#rd
+
+
+
+https://mp.weixin.qq.com/s?__biz=MzkyNjI0MTYwNQ==&mid=2247487592&idx=1&sn=9ea77048fbe5b4be4959245234b9e71e&chksm=c23b1642f54c9f54476bfd0b439b4be3c9746060bd5c32de312ab64b8638e3639655db6335f8&mpshare=1&scene=1&srcid=0817ypmJIVx2ocUwmiznff8K&sharer_sharetime=1629207327488&sharer_shareid=0f9991a2eb945ab493c13ed9bfb8bf4b&exportkey=A39xVeDz1JilVNbTG5kmJLw%3D&pass_ticket=PR%2FK8afpsNEi%2BddqfJ7hs4AucApd5fjNtWZXpgb9L8YVYdX9SuEkeZYVHnTPPBgQ&wx_header=0#rd
+
+
+
+**分析题目**：保证Redis 中的 20w 数据都是热点数据 说明是 被频繁访问的数据，并且要保证Redis的内存能够存放20w数据，要计算出Redis内存的大小。
+
+- **保留热点数据：**对于保留 Redis 热点数据来说，我们可以使用 Redis 的内存淘汰策略来实现，可以使用**allkeys-lru淘汰策略，**该淘汰策略是从 Redis 的数据中挑选最近最少使用的数据删除，这样频繁被访问的数据就可以保留下来了
+
+- **保证 Redis 只存20w的数据：**1个中文占2个字节，假如1条数据有100个中文，则1条数据占200字节，20w数据 乘以 200字节 等于 4000 字节（大概等于38M）;所以要保证能存20w数据，Redis 需要38M的内存
+
+
+
+**题目：MySQL里有2000w数据，redis中只存20w的数据，如何保证redis中的数据都是热点数据?**
+
+限定 Redis 占用的内存，Redis 会根据自身数据淘汰策略，加载热数据到内存。所以，计算一下 20W 数据大约占用的内存，然后设置一下 Redis 内存限制即可。
+
+
+
+**题目：假如 Redis 里面有 1 亿个 key，其中有 10w 个 key 是以某个固定的已知的前缀开头的，如果将它们全部找出来？**
+
+使用 keys 指令可以扫出指定模式的 key 列表。对方接着追问：如果这个 Redis 正在给线上的业务提供服务，那使用 keys 指令会有什么问题？这个时候你要回答 Redis 关键的一个特性：Redis 的单线程的。keys 指令会导致线程阻塞一段时间，线上服务会停顿，直到指令执行完毕，服务才能恢复。这个时候可以使用 scan 指令，scan 指令可以无阻塞地提取出指定模式的 key 列表，但是会有一定的重复概率，在客户端做一次去重就可以了，但是整体所花费的时间会比直接用 keys 指令长。
 
 
 

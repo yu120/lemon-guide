@@ -2285,6 +2285,30 @@ MySQL5.1开始支持基于行的复制，这种方式会将实际数据记录在
 
 
 
+# InnoDB原理
+
+## Buffer Pool
+
+`InnoDB`为了解决磁盘`IO`问题，`MySQL`需要申请一块内存空间，这块内存空间称为`Buffer Pool`。
+
+![img](images/Database/modb_20210816_ed8bed5e-fe80-11eb-8072-00163e068ecd.png)
+
+### 缓存页
+
+`Buffer Pool`申请下来后，`Buffer Pool`里面放什么，要怎么规划？
+
+`MySQL`数据是以页为单位，每页默认`16KB`，称为数据页，在`Buffer Pool`里面会划分出若干**个缓存页**与数据页对应。
+
+![img](images/Database/modb_20210816_edb843d6-fe80-11eb-8072-00163e068ecd.png)
+
+
+
+### 描述数据
+
+
+
+
+
 # 高可用方案
 
 我们在考虑MySQL数据库的高可用架构时，主要考虑如下几方面：
