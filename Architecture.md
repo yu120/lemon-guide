@@ -1729,6 +1729,7 @@ https://wx.com/oauth/token?
 ## 简化模式
 
 简化模式（Implicit Grant）。
+
 ![简化模式](images/Architecture/简化模式.png)
 
 -  第一步：用户访问页面时，重定向到认证服务器
