@@ -604,7 +604,26 @@ WHERE A.EMP_SUPV_ID = B.EMP_ID;
 
 从粒度上来说就是**表锁、页锁、行锁**。表锁有意向共享锁、意向排他锁、自增锁等。行锁是在引擎层由各个引擎自己实现的。但并不是所有的引擎都支持行锁，比如 `MyISAM`引擎就`不支持行锁`。
 
+
+
+按照锁的粒度进行分类，MySQL主要包含三种类型（级别）的锁定机制：
+
+- **全局锁**：锁的是整个database。由MySQL的SQL layer层实现的
+- **表级锁**：锁的是某个table。由MySQL的SQL layer层实现的
+- **⾏级锁**：锁的是某⾏数据，也可能锁定⾏之间的间隙。由某些存储引擎实现，⽐如InnoDB
+
+
+
+表级锁和行级锁的区别：
+
+- **表级锁**：开销⼩，加锁快；不会出现死锁；锁定粒度⼤，发⽣锁冲突的概率最⾼，并发度最低
+- **⾏级锁**：开销⼤，加锁慢；会出现死锁；锁定粒度最⼩，发⽣锁冲突的概率最低，并发度也最⾼
+
+
+
 ## 全局锁
+
+锁的是整个database。由MySQL的SQL layer层实现的。
 
 
 
@@ -824,7 +843,7 @@ select ... for update;
 
 
 
-### AUTO-INC 锁
+### AUTO-INC锁(自增长锁)
 
 在为某个字段声明 `AUTO_INCREMENT` 属性时，之后可以在插入数据时，可以不指定该字段的值，数据库会自动给该字段赋值递增的值，这主要是通过 AUTO-INC 锁实现的。
 
@@ -1304,7 +1323,73 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 
 
 
+# MySQL日志
+
+## binlog
+
+`binlog` 用于记录数据库执行的写入性操作(不包括查询)信息，以二进制的形式保存在磁盘中。`binlog` 是 `mysql`的逻辑日志，并且由 `Server` 层进行记录，使用任何存储引擎的 `mysql` 数据库都会记录 `binlog` 日志。
+
+- **逻辑日志**：可以简单理解为记录的就是sql语句 。
+- **物理日志**：`mysql` 数据最终是保存在数据页中的，物理日志记录的就是数据页变更 。
+
+`binlog` 是通过追加的方式进行写入的，可以通过`max_binlog_size` 参数设置每个 `binlog`文件的大小，当文件大小达到给定值之后，会生成新的文件来保存日志。
+
+
+
+### 使用场景
+
+在实际应用中， `binlog` 的主要使用场景有两个，分别是 **主从复制** 和 **数据恢复** 。
+
+- **主从复制** ：在 `Master` 端开启 `binlog` ，然后将 `binlog`发送到各个 `Slave` 端， `Slave` 端重放 `binlog` 从而达到主从数据一致
+- **数据恢复** ：通过使用 `mysqlbinlog` 工具来恢复数据
+
+
+
+### 刷盘时机
+
+对于 `InnoDB` 存储引擎而言，只有在事务提交时才会记录`biglog` ，此时记录还在内存中，那么 `biglog`是什么时候刷到磁盘中的呢？`mysql` 通过 `sync_binlog` 参数控制 `biglog` 的刷盘时机，取值范围是 `0-N`：
+
+- 0：不去强制要求，由系统自行判断何时写入磁盘；
+- 1：每次 `commit` 的时候都要将 `binlog` 写入磁盘；
+- N：每N个事务，才会将 `binlog` 写入磁盘。
+
+从上面可以看出， `sync_binlog` 最安全的是设置是 `1` ，这也是`MySQL 5.7.7`之后版本的默认值。但是设置一个大一些的值可以提升数据库性能，因此实际情况下也可以将值适当调大，牺牲一定的一致性来获取更好的性能。
+
+
+
+### 日志格式
+
+`binlog` 日志有三种格式，分别为 `STATMENT` 、 `ROW` 和 `MIXED`。
+
+在 `MySQL 5.7.7` 之前，默认的格式是 `STATEMENT` ， `MySQL 5.7.7` 之后，默认值是 `ROW`。日志格式通过 `binlog-format` 指定。
+
+- `STATMENT`：基于`SQL` 语句的复制( `statement-based replication, SBR` )，每一条会修改数据的sql语句会记录到`binlog` 中  。
+
+- - 优点：不需要记录每一行的变化，减少了 binlog 日志量，节约了 IO  , 从而提高了性能；
+  - 缺点：在某些情况下会导致主从数据不一致，比如执行sysdate() 、  slepp()  等 。
+
+- `ROW`：基于行的复制(`row-based replication, RBR` )，不记录每条sql语句的上下文信息，仅需记录哪条数据被修改了 。
+
+- - 优点：不会出现某些特定情况下的存储过程、或function、或trigger的调用和触发无法被正确复制的问题 ；
+  - 缺点：会产生大量的日志，尤其是` alter table ` 的时候会让日志暴涨
+
+- `MIXED`：基于`STATMENT` 和 `ROW` 两种模式的混合复制(`mixed-based replication, MBR` )，一般的复制使用`STATEMENT` 模式保存 `binlog` ，对于 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存 `binlog`
+
+
+
+## redo log
+
+
+
+## undo log
+
+
+
 # InnoDB
+
+## 线程
+
+
 
 ## 数据页
 
@@ -1639,6 +1724,21 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 - InnoDB在LRU列表中引入了midpoint参数。新读取的页并不会直接放在LRU列表的首部，而是放在LRU列表的midpoint位置，即 innodb_old_blocks_pct这个点的设置。默认是37%，最小是5，最大是95；如果内存比较大的话，可以将这个数值调低，通常会调成20，也就是说20%的是冷数据块。目的是为了保护热区数据不被刷出内存。
 - InnoDB还引入了innodb_old_blocks_time参数，控制成为热数据的所需时间，默认是1000ms，也就是1s，也就是数据在1s内没有被刷走，就调入热区。 
 
+
+
+## Change Buffer
+
+可变缓冲区（Change Buffer），在内存中，可变缓冲区是InnoDB缓冲池的一部分，在磁盘上，它是系统表空间的一部分，因此即使在数据库重新启动之后，索引更改也会保持缓冲状态。
+
+可变缓冲区是一种特殊的数据结构，当受影响的页不在缓冲池中时，缓存对辅助索引页的更改。
+
+
+
+## Log Buffer
+
+日志缓冲区（Log Buffer ），主要保存写到redo log(重放日志)的数据。周期性的将缓冲区内的数据写入redo日志中。将内存中的数据写入磁盘的行为由innodb_log_at_trx_commit 和 innodb_log_at_timeout 调节。较大的redo日志缓冲区允许大型事务在事务提交前不进行写磁盘操作。
+
+变量：innodb_log_buffer_size (默认 16M)
 
 
 ## InnoDB日志
