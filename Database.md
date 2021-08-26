@@ -1325,7 +1325,61 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 
 # MySQL日志
 
-## binlog
+**生产优化**
+
+- 在生产上，建议 innodb_flush_log_at_trx_commit 设置成 1，可以让每次事务的 redo log 都持久化到磁盘上。保证异常重启后，redo log 不丢失
+- 建议 sync_binlog 设置成 1，可以让每次事务的 binlog 都持久化到磁盘上。保证异常重启后，binlog 不丢失
+
+
+
+**IO性能优化**
+
+- `binlog_group_commit_sync_delay`：表示延迟多少微秒后，再执行 `fsync`
+- `binlog_group_commit_sync_no_delay_count`：表示累计多少次后，在调用 `fsync`
+
+
+
+当 `MySQL` 出现了 `IO` 的性能问题，可以考虑下面的优化策略：
+
+- 设置 `binlog_group_commit_sync_delay` 和 `binlog_group_commit_sync_no_delay_count`。可以使用故意等待来减少，`binlog` 的写盘次数，没有数据丢失的风险，但是会有客户端响应变慢的风险
+- 设置 `sync_binlog` 设置为 `100~1000` 之间的某个值。这样做存在的风险是可能造成 `binlog` 丢失
+- 设置 `innodb_flush_log_at_trx_commit = 2`，可能会丢数据
+
+
+
+## 重做日志（redo log）
+
+重做日志（redo log）是InnoDB引擎层的日志，用来记录事务操作引起数据的变化，记录的是数据页的物理修改。
+
+在MySQL里，如果我们要执行一条更新语句。执行完成之后，数据不会立马写入磁盘，因为这样对磁盘IO的开销比较大。MySQL里面有一种叫做WAL（Write-Ahead Logging），就是先写日志再写磁盘。就是当有一条记录需要更新的时候，InnoDB 会先写redo log 里面，并更新内存，这个时候更新的操作就算完成了。之后，MySQL会在合适的时候将操作记录 flush 到磁盘上面。当然 flush 的条件可能是系统比较空闲，或者是 redo log 空间不足时。redo log 文件的大小是固定的，比如可以是由4个1GB文件组成的集合。
+
+### 作用
+
+确保事务的持久性。防止在发生故障的时间点，尚有脏页未写入磁盘，在重启mysql服务的时候，根据redo log进行重做，从而达到事务的持久性这一特性。
+
+
+
+### 写入流程
+
+为了控制 redo log 的写入策略，innodb_flush_log_at_trx_commit 会有下面 3 中取值：
+
+- **0：每次提交事务只写在 redo log buffer 中**
+- **1：每次提交事务持久化到磁盘**
+- **2：每次提交事务写到 文件系统的 page cache 中**
+
+
+
+### 刷盘场景
+
+redo log 实际的触发 fsync 操作写盘包含以下几个场景：
+
+- **后台每隔 1 秒钟的线程轮询**
+- **innodb_flush_log_at_trx_commit 设置成 1 时，事务提交时触发**
+- **innodb_log_buffer_size 是设置 redo log 大小的参数**。当 redo log buffer 达到 innodb_log_buffer_size / 2 时，也会触发一次 fsync
+
+
+
+## 二进制日志（bin log）
 
 `binlog` 用于记录数据库执行的写入性操作(不包括查询)信息，以二进制的形式保存在磁盘中。`binlog` 是 `mysql`的逻辑日志，并且由 `Server` 层进行记录，使用任何存储引擎的 `mysql` 数据库都会记录 `binlog` 日志。
 
@@ -1333,6 +1387,11 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 - **物理日志**：`mysql` 数据最终是保存在数据页中的，物理日志记录的就是数据页变更 。
 
 `binlog` 是通过追加的方式进行写入的，可以通过`max_binlog_size` 参数设置每个 `binlog`文件的大小，当文件大小达到给定值之后，会生成新的文件来保存日志。
+
+### 作用
+
+- 用于复制，在主从复制中，从库利用主库上的binlog进行重播，实现主从同步
+- 用于数据库的基于时间点的还原
 
 
 
@@ -1349,9 +1408,9 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 
 对于 `InnoDB` 存储引擎而言，只有在事务提交时才会记录`biglog` ，此时记录还在内存中，那么 `biglog`是什么时候刷到磁盘中的呢？`mysql` 通过 `sync_binlog` 参数控制 `biglog` 的刷盘时机，取值范围是 `0-N`：
 
-- 0：不去强制要求，由系统自行判断何时写入磁盘；
-- 1：每次 `commit` 的时候都要将 `binlog` 写入磁盘；
-- N：每N个事务，才会将 `binlog` 写入磁盘。
+- `sync_binlog=0`：不去强制要求，由系统自行判断何时写入磁盘；
+- `sync_binlog=1`：每次 `commit` 的时候都要将 `binlog` 写入磁盘；
+- `sync_binlog=N(N>1)`：每N个事务，才会将 `binlog` 写入磁盘。
 
 从上面可以看出， `sync_binlog` 最安全的是设置是 `1` ，这也是`MySQL 5.7.7`之后版本的默认值。但是设置一个大一些的值可以提升数据库性能，因此实际情况下也可以将值适当调大，牺牲一定的一致性来获取更好的性能。
 
@@ -1377,11 +1436,21 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 
 
 
-## redo log
+## 回滚日志（undo log）
+
+### 作用
+
+保证数据的原子性，保存了事务发生之前的数据的一个版本，可以用于回滚，同时可以提供多版本并发控制下的读（MVCC），也即非锁定读。
 
 
 
-## undo log
+## 错误日志（error log）
+
+## 慢查询日志（slow query log）
+
+## 一般查询日志（general log）
+
+## 中继日志（relay log）
 
 
 
@@ -2795,110 +2864,6 @@ MyISAM既不支持事务、也不支持外键、其优势是访问速度快，�
 
 
 
-## 日志系统
-
-**生产优化**
-
-- 在生产上，建议 innodb_flush_log_at_trx_commit 设置成 1，可以让每次事务的 redo log 都持久化到磁盘上。保证异常重启后，redo log 不丢失
-- 建议 sync_binlog 设置成 1，可以让每次事务的 binlog 都持久化到磁盘上。保证异常重启后，binlog 不丢失
-
-
-
-**IO性能优化**
-
-- `binlog_group_commit_sync_delay`：表示延迟多少微秒后，再执行 `fsync`
-- `binlog_group_commit_sync_no_delay_count`：表示累计多少次后，在调用 `fsync`
-
-
-
-当 `MySQL` 出现了 `IO` 的性能问题，可以考虑下面的优化策略：
-
-- 设置 `binlog_group_commit_sync_delay` 和 `binlog_group_commit_sync_no_delay_count`。可以使用故意等待来减少，`binlog` 的写盘次数，没有数据丢失的风险，但是会有客户端响应变慢的风险
-- 设置 `sync_binlog` 设置为 `100~1000` 之间的某个值。这样做存在的风险是可能造成 `binlog` 丢失
-- 设置 `innodb_flush_log_at_trx_commit = 2`，可能会丢数据
-
-
-
-### 重做日志（redo log）
-
-在MySQL里，如果我们要执行一条更新语句。执行完成之后，数据不会立马写入磁盘，因为这样对磁盘IO的开销比较大。MySQL里面有一种叫做WAL（Write-Ahead Logging），就是先写日志再写磁盘。就是当有一条记录需要更新的时候，InnoDB 会先写redo log 里面，并更新内存，这个时候更新的操作就算完成了。之后，MySQL会在合适的时候将操作记录 flush 到磁盘上面。当然 flush 的条件可能是系统比较空闲，或者是 redo log 空间不足时。redo log 文件的大小是固定的，比如可以是由4个1GB文件组成的集合。如下图所示：
-
-![redolog位置指针](images/Database/redolog位置指针.jpg)
-
-write pos 是当前要写入日志的位置，当写到末尾时，会重新到文件头部开始写入。checkpoint 是当前待擦除的位置，以此循环反复利用这 4GB 的空间。有了 redo log，即时数据异常宕机，重启时也不会丢失已经提交的数据，这个能力叫做 crash-safe。
-
-
-
-**redo log写入流程**
-
-为了控制 redo log 的写入策略，innodb_flush_log_at_trx_commit 会有下面 3 中取值：
-
-- **0：每次提交事务只写在 redo log buffer 中**
-- **1：每次提交事务持久化到磁盘**
-- **2：每次提交事务写到 文件系统的 page cache 中**
-
-redo log 实际的触发 fsync 操作写盘包含以下几个场景：
-
-- **后台每隔 1 秒钟的线程轮询**
-- **innodb_flush_log_at_trx_commit 设置成 1 时，事务提交时触发**
-- **innodb_log_buffer_size 是设置 redo log 大小的参数**。当 redo log buffer 达到 innodb_log_buffer_size / 2 时，也会触发一次 fsync
-
-
-
-### 归档日志（binlog）
-
-通过MySQL的架构可以看出，MySQL服务端主要分为2大块：Server层 和 引擎层。redo log 本身是 InnoDB所特有的日志，而Server 层也有自己的日志，那就是binlog。至于为什么会有两种日志，这就是历史原因了。最开始，MySQL原生的存储引擎是MyISAM。它本身不支持事务的特性，而InnoDB 是另外一家公司以插件的形式开发的，为了支持事务等特性，引入了 redo log。两者主要有以下区别：
-
-![binlog和redolog区别](images/Database/binlog和redolog区别.jpg)
-
-结合到update 语句中，如：对ID=2的这一行的c 值进行更改，执行流程如下所示：
-
-![update的binlog执行流程](images/Database/update的binlog执行流程.jpg)
-
-从上面的执行流程可以看出，对于redo log 的写入拆成了 2 个步骤，这就是**两阶段提交**。
-
-
-
-**binlog写入流程**
-
-事务执行过程中，binlog 首先会被写到 binlog cache 中；事务提交的时候，再讲binlog cache 写到 binlog 文件中。一个事务的 binlog 是原子的，无论多大都需要保证完整性。
-
-系统为每个客户端线程分配一个 binlog cache，其大小由 binlog_cache_size 控制。如果binlog cache 超过阀值，就会临时持久化到磁盘。当事务提交的时候，再将 binlog cache 中完整的事务持久化到磁盘中，并清空 binlog cache。
-
-![binlog写入流程](images/Database/binlog写入流程.jpg)
-
-从上面可以看出，每个客户端线程都有自己独立的 binlog cache，但是会共享一份 binlog files。上面的 write 是指把binlog cache 写到文件系统的 page cache，并没有写入到磁盘中，因此速度较快。fsync 是实际的写盘操作，占用磁盘的 IOPS。write 和 fsync 的写入时机，是由sync_binlog 控制的：
-
-- sync_binlog=0：每次事务提交都只 write，不 fsync
-- sync_binlog=1：每次事务提交都会fsync
-- sync_binlog=N（N>1）：每次提交事务都会 write，累计N 个后再执行 fsync
-
-在出现 IO 瓶颈的情况下，可以考虑将 sync_binlog 设置成一个大的值。比较常见的是将 N设置为 100~1000。但是存在的风险是，当主机异常重启时会丢失 N 个最近提交的事务 binlog。
-
-
-
-### 回滚日志（undo log）
-
-
-
-### 错误日志（errorlog）
-
-
-
-### 慢查询日志（slow query log）
-
-
-
-### 一般查询日志（general log）
-
-
-
-### 中继日志（relay log）
-
-
-
-
-
 ## 查询过程
 
 ![MySQL查询过程](images/Database/MySQL查询过程.png)
@@ -3348,161 +3313,3 @@ mysql> show variables like 'slave_parallel%';
 
 
 # ClickHouse
-
-
-
-# 常见问题
-
-## MySQL事务
-
-**问题一：什么Mysql的事务？事务的四大特性？事务带来的什么问题？**
-
-
-
-在Mysql中事务的四大特性（简称为`ACID`）主要包含：
-
-- **原子性（Atomicity）**：是指事务的原子性操作，**对数据的修改要么全部执行成功，要么全部失败，实现事务的原子性**，是基于日志的Redo/Undo机制
-- **一致性**：是指**执行事务前后的状态要一致**，可以理解为数据一致性
-- **隔离性**：侧重指**事务之间相互隔离，不受影响**，这个与事务设置的隔离级别有密切的关系
-- **持久性**：则是指在**一个事务提交后，这个事务的状态会被持久化到数据库中，也就是事务提交，对数据的新增、更新将会持久化到数据库中**
-
-在我的理解中：**原子性、隔离性、持久性都是为了保障一致性而存在的，一致性也是最终的目的**。
-
-
-
-Mysql中事务的隔离级别分为四大等级：
-
-- **读未提交（READ UNCOMMITTED）**
-- **读提交 （READ COMMITTED）**
-- **可重复读 （REPEATABLE READ）**
-- **串行化 （SERIALIZABLE）**
-
-没有哪种隔离级别是完美的，只能根据自己的项目业务场景去评估选择最适合的隔离级别，大部分的公司一般选择Mysql默认的隔离级别：**可重复读**。隔离级别从：**读未提交-读提交-可重复读-串行化**，级别越来越高，隔离也就越来越严实，到最后的串行化，当出现读写锁冲突的时候，后面的事务只能等前面的事务完成后才能继续访问。
-
-- **读未提交：读取到别的事务还没有提交的数据，从而产生了脏读**
-- **读提交：读取别的事务已经提交的数据，从而产生不可重复读**
-- **可重复读：事务开启过程中看到的数据和事务刚开始看到的数据是一样的，从而产生幻读，在Mysql的中通过MVCC多版本控制的一致性视图解决了不可重复读问题以及通过间隙锁解决了幻读问题**
-- **串行化：对于同一行记录，若是读写锁发生冲突，后面访问的事务只能等前面的事务执行完才能继续访问**
-
-
-
-## MySQL存储引擎
-
-**问题二：MySQL存储引擎的InnoDB和MyISAM有什么区别？**
-
-- InnoDB和MyISAM都是Mysql的存储引擎，现在MyISAM也逐渐被InnoDB给替代，主要因为InnoDB支持事务和行级锁，MyISAM不支持事务和行级锁，MyISAM最小锁单位是表级。因为MyISAM不支持行级锁，所以在并发处理能力上InnoDB会比MyISAM好
-- 数据的存储上：MyISAM的索引也是由B+树构成，但是树的叶子结点存的是行数据的地址，查找时需要找到叶子结点的地址，再根据叶子结点地址查找数据
-- 数据文件构成：MyISAM有三种存储文件分别是扩展名为：`.frm`（文件存储表定义）、`.MYD` (MYData数据文件)、`.MYI` (MYIndex索引文件)。而InnoDB的表只受限于操作系统文件的大小，一般是2GB
-- 查询区别：对于读多写少的业务场景，MyISAM会更加适合，而对于update和insert比较多的场景InnoDB会比较适合。
-- coun(\*)区别：select count(\*) from table，MyISAM引擎会查询已经保存好的行数，这是不加where的条件下，而InnoDB需要全表扫描一遍，InnoDB并没有保存表的具体行数
-- 其它的区别：InnoDB支持外键，但是不支持全文索引，而MyISAM不支持外键，支持全文索引，InnoDB的主键的范围比MyISAM的大
-
-
-
-## SQL查询流程
-
-**问题三：SQL查询流程是什么？**
-
-当执行一条查询的SQl的时候大概发生了以下的步骤：
-
-- 客户端发送查询语句给服务器
-- 服务器首先进行用户名和密码的验证以及权限的校验
-- 然后会检查缓存中是否存在该查询，若存在，返回缓存中存在的结果。若是不存在就进行下一步
-- 接着进行语法和词法的分析，对SQl的解析、语法检测和预处理，再由优化器生成对应的执行计划
-- Mysql的执行器根据优化器生成的执行计划执行，调用存储引擎的接口进行查询
-- 服务器将查询的结果返回客户端。
-
-SQL查询流程图如下：
-
-**![SQL查询流程图](images/Database/SQL查询流程图.png)**
-
- 
-
-## MySQL Log
-
-**问题四：redo log和binlog了解过吗？**
-
-- redo log
-  - `redo log`日志也叫做`WAL`技术（`Write- Ahead Logging`），他是一种**先写日志，并更新内存，最后再更新磁盘的技术**，为了就是减少sql执行期间的数据库io操作，并且更新磁盘往往是在Mysql比较闲的时候，这样就大大减轻了Mysql的压力
-  - `redo log`是固定大小，是物理日志，属于InnoDB引擎的，并且写redo log是环状写日志的形式
-  - `redo log`日志实现了即使在数据库出现异常宕机的时候，重启后之前的记录也不会丢失，这就是`crash-safe`能力
-
-- binlog
-
-- `binlog`称为**归档日志**，是逻辑上的日志，它属于Mysql的Server层面的日志，记录着sql的原始逻辑，主要有两种模式：**一个是statement格式记录的是原始的sql，而row格式则是记录行内容**。
-
-
-
-redo log和binlog记录的形式、内容不同，这两者日志都能通过自己记录的内容恢复数据。之所以这两个日志同时存在，是因为刚开始Mysql自带的引擎MyISAM就没有crash-safe功能的，并且在此之前Mysql还没有InnoDB引擎，Mysql自带的binlog日志只是用来归档日志的，所以InnoDB引擎也就通过自己redo log日志来实现crash-safe功能。
-
-
-
-## MySQL索引种类
-
-**问题五：你知道有哪些种类的索引？**
-
-索引从**数据结构**进行划分的分为：**B+树索引、hash索引、R-Tree索引、FULLTEXT索引**。
-
-索引从**物理存储**的角度划分为：**聚族索引**和**非聚族索引**。
-
-从**逻辑的角度**分为：**主键索引**、**普通索引、唯一索引、联合索引**以及**空间索引**。
-
-
-
-## MySQL索引
-
-**问题六：怎么查看索引是否生效？什么情况下索引会失效呢？**
-
-查看索引是否起作用可以使用explain关键字，查询后的语句中的key字段，若是使用了索引，该字段会展示索引的名字。
-
-![MySQL索引-explain](images/Database/MySQL索引-explain.jpg)
-
-- `id`：查询的序列号
-- `select_type`：查询类型
-- `table`：查询表名
-- `type`：扫描方式，all表示全表扫描
-- `possible_keys`：可是使用到的索引
-- `key`：实际使用到的索引
-- `rows`：该sql扫面了多少行
-- `Extra`：sql语句额外的信息，比如排序方式
-
-
-
-- **where条件查询中使用了or关键字**，有可能使用了索引进行查询也会导致索引失效，若是想使用or关键字，又不想索引失效，只能在or的所有列上都建立索引。
-
-![MySQL索引-or使索引失效](images/Database/MySQL索引-or使索引失效.jpg)
-
-- **条件查询中使用like关键字，并且不符合最左前缀原则**，会导致索引失效。
-
-![MySQL索引-like使索引失效](images/Database/MySQL索引-like使索引失效.png)
-
-- **条件查询的字段是字符串，而错误的使用where column = 123 数字类型**也会导致索引失效。
-
-![MySQL索引-数据类型不匹配使索引失效](images/Database/MySQL索引-数据类型不匹配使索引失效.png)
-
-- 对于**联合索引查询不符合最左前缀原则**，也会导致索引失效，如下所示：
-
-```sql
-alter table user add index union_index(name, age)   // name左边的列， age 右边的列                                                              
-select * from user where name = 'lidu'     // 会用到索引
-select * from user where age = 18          //  不会使用索引
-```
-
-- 在**where条件查询的后面对字段进行null值判断**，会导致索引失效，解决方式为可以把null改为0或者-1这些特殊的值代替：
-
-```sql
-SELECT id FROM table WHERE num is null
-```
-
-- 在**where子句中使用!= ,< >这样的符号**，也会导致索引失效。
-
-```sql
-SELECT id FROM table WHERE num != 0
-```
-
-- **where条件子句中=的左边使用表达式操作或者函数操作**，也会导致索引失效。 
-
-```sql
-SELECT id FROM user WHERE age / 2 = 1
-SELECT id FROM user WHERE SUBSTRING(name,1,2) = 'lidu'
-```
