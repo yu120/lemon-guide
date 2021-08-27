@@ -2166,9 +2166,14 @@ java -Xmx4048m -Xms4048m -Xmn2024m -XX:SurvivorRatio=7  -Xss256k -XX:MetaspaceSi
 
 ### GC
 
-#### Serial垃圾收集器（新生代）开启
+#### Serial垃圾收集器（新生代）
 
-- -XX:+UseSerialGC 关闭：
+开启
+
+- -XX:+UseSerialGC
+
+关闭：
+
 - -XX:-UseSerialGC //新生代使用Serial  老年代则使用SerialOld
 
 

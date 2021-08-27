@@ -3888,7 +3888,7 @@ Error 类是指 java 运行时系统的内部错误和资源耗尽错误。应�
 
 
 
-# JAVA Others
+# Others
 
 ## Annotation
 

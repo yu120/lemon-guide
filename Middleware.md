@@ -95,6 +95,28 @@ org.springframework.boot.env.YamlPropertySourceLoader
 
 # Redis
 
+**Java类型所占字节数（或bit数）**
+
+| 类型    | 存储(byte) | bit数(bit) | 取值范围                                                     |
+| ------- | ---------- | ---------- | ------------------------------------------------------------ |
+| int     | 4字节      | 4×8位      | 即 (-2)的31次方 ~ (2的31次方) - 1                            |
+| short   | 2字节      | 2×8位      | 即 (-2)的15次方 ~ (2的15次方) - 1                            |
+| long    | 8字节      | 8×8位      | 即 (-2)的63次方 ~ (2的63次方) - 1                            |
+| byte    | 1字节      | 1×8位      | 即 (-2)的7次方 ~ (2的7次方) - 1，-128~127                    |
+| float   | 4字节      | 4×8位      | float 类型的数值有一个后缀 F（例如：3.14F）                  |
+| double  | 8字节      | 8×8位      | 没有后缀 F 的浮点数值（例如：3.14）默认为 double             |
+| boolean | 1字节      | 1×8位      | true、false                                                  |
+| char    | 2字节      | 2×8位      | Java中，只要是字符，不管是数字还是英文还是汉字，都占两个字节 |
+
+**注意**：
+
+- 英文的数字、字母或符号：1个字符 = 1个字节数
+- 中文的数字、字母或符号：1个字符 = 2个字节数
+- 计算机的基本单位：bit 。一个bit代表一个0或1，1个字节是8个bit
+- 1TB=1024GB，1GB=1024MB，1MB=1024KB，1KB=1024B（字节，byte），1B=8b（bit，位）
+
+
+
 ## 数据类型
 
 在 Redis 中，常用的 5 种数据类型和应用场景如下：
@@ -121,7 +143,7 @@ String 数据结构是简单的 key-value 类型，value 不仅可以是 String�
 
 - 存储、读取、修改用户属性
 
-实战场景：
+**实战场景**
 
 - 缓存： 经典使用场景，把常用信息，字符串，图片或者视频等信息放到redis中，redis作为缓存层，mysql做持久化层，降低mysql的读写压力
 - 计数器：redis是单线程模型，一个命令执行完才会执行下一个，同时数据可以一步落地到其他的数据源
@@ -185,9 +207,9 @@ Set 就是一个集合，集合的概念就是一堆不重复值的组合。利�
 
 ## 特殊数据结构
 
-### HyperLogLog
+### HyperLogLog(基数统计)
 
-hyperloglog可用极小空间完成独立数统计。命令如下：
+HyperLogLog 主要的应用场景就是进行基数统计。实际上不会存储每个元素的值，它使用的是概率算法，通过存储元素的hash值的第一个1的位置，来计算元素数量。HyperLogLog 可用极小空间完成独立数统计。命令如下：
 
 | 命令                          | 作用                    |
 | ----------------------------- | ----------------------- |
@@ -197,22 +219,64 @@ hyperloglog可用极小空间完成独立数统计。命令如下：
 
 
 
-### Geo
+**应用案例**
 
-geo是地理空间位置。redis支持将geo信息存储到有序集合中，再通过geohash算法进行填充。命令如下：
+如何统计 Google 主页面每天被多少个不同的账户访问过？
 
-| 命令                                 | 作用                                  |
-| ------------------------------------ | ------------------------------------- |
-| geoadd key latitude longitude member | 添加成员位置(纬度、经度、名称)到key中 |
-| geopos key member ...                | 获取成员geo坐标                       |
-| geodist key member1 member2          | 计算成员位置间距离                    |
-| georadius                            | 基于经纬度坐标范围查询                |
-| georadiusbymember                    | 基于成员位置范围查询                  |
-| geohash                              | 计算经纬度hash                        |
+对于 Google 这种访问量巨大的网页而言，其实统计出有十亿的访问量或十亿零十万的访问量其实是没有太多的区别的，因此，在这种业务场景下，为了节省成本，其实可以只计算出一个大概的值，而没有必要计算出精准的值。
 
+对于上面的场景，可以使用`HashMap`、`BitMap`和`HyperLogLog`来解决。对于这三种解决方案，这边做下对比：
+
+- `HashMap`：算法简单，统计精度高，对于少量数据建议使用，但是对于大量的数据会占用很大内存空间
+- `BitMap`：位图算法，具体内容可以参考我的这篇，统计精度高，虽然内存占用要比`HashMap`少，但是对于大量数据还是会占用较大内存
+- `HyperLogLog`：存在一定误差，占用内存少，稳定占用 12k 左右内存，可以统计 2^64 个元素，对于上面举例的应用场景，建议使用
 
 
-### Pub/Sub
+
+### Geo(地理空间信息)
+
+Geo主要用于存储地理位置信息，并对存储的信息进行操作（添加、获取、计算两位置之间距离、获取指定范围内位置集合、获取某地点指定范围内集合）。Redis支持将Geo信息存储到有序集合(zset)中，再通过Geohash算法进行填充。命令如下：
+
+| 命令                                 | 作用                                                         |
+| ------------------------------------ | ------------------------------------------------------------ |
+| geoadd key latitude longitude member | 添加成员位置(纬度、经度、名称)到key中                        |
+| geopos key member ...                | 获取成员geo坐标                                              |
+| geodist key member1 member2 [unit]   | 计算成员位置间距离。若两个位置之间的其中一个不存在， 那返回空值 |
+| georadius                            | 基于经纬度坐标范围查询                                       |
+| georadiusbymember                    | 基于成员位置范围查询                                         |
+| geohash                              | 计算经纬度hash                                               |
+
+
+
+**GEORADIUS**
+
+```properties
+GEORADIUS key longitude latitude radius m|km|ft|mi [WITHCOORD] [WITHDIST] [WITHHASH] [COUNT count]
+```
+
+以给定的经纬度为中心， 返回键包含的位置元素当中， 与中心的距离不超过给定最大距离的所有位置元素。范围可以使用以下其中一个单位：
+
+- **m** 表示单位为米
+- **km** 表示单位为千米
+- **mi** 表示单位为英里
+- **ft** 表示单位为英尺
+
+在给定以下可选项时， 命令会返回额外的信息：
+
+- `WITHDIST`: 在返回位置元素的同时， 将位置元素与中心之间的距离也一并返回。 距离单位和范围单位保持一致
+- `WITHCOORD`: 将位置元素的经度和维度也一并返回
+- `WITHHASH`: 以 52 位有符号整数的形式， 返回位置元素经过原始 geohash 编码的有序集合分值。 这个选项主要用于底层应用或者调试， 实际中的作用并不大
+
+命令默认返回未排序的位置元素。 通过以下两个参数， 用户可以指定被返回位置元素的排序方式：
+
+- `ASC`: 根据中心的位置， 按照从近到远的方式返回位置元素
+- `DESC`: 根据中心的位置， 按照从远到近的方式返回位置元素
+
+在默认情况下， GEORADIUS 命令会返回所有匹配的位置元素。 虽然用户可以使用 **COUNT `<count>`** 选项去获取前 N 个匹配元素， 但是因为命令在内部可能会需要对所有被匹配的元素进行处理， 所以在对一个非常大的区域进行搜索时， 即使只使用 `COUNT` 选项去获取少量元素， 命令的执行速度也可能会非常慢。 但是从另一方面来说， 使用 `COUNT` 选项去减少需要返回的元素数量， 对于减少带宽来说仍然是非常有用的。
+
+
+
+### Pub/Sub(发布订阅)
 
 发布订阅类似于广播功能。redis发布订阅包括 发布者、订阅者、Channel。常用命令如下：
 
@@ -227,9 +291,9 @@ geo是地理空间位置。redis支持将geo信息存储到有序集合中，再
 
 
 
-### bitmap
+### Bitmap(位图)
 
-bitmap是一串连续的2进制数字（0或1），每一位所在的位置为偏移(offset)，在bitmap上可执行AND, OR, XOR以及其它位操作。常用命令如下：
+Bitmap就是位图，其实也就是字节数组（byte array），用一串连续的2进制数字（0或1）表示，每一位所在的位置为偏移(offset)，位图就是用每一个二进制位来存放或者标记某个元素对应的值。通常是用来判断某个数据存不存在的，因为是用bit为单位来存储所以Bitmap本身会极大的节省储存空间。常用命令如下：
 
 | 命令                        | 作用                                                | 时间复杂度 |
 | --------------------------- | --------------------------------------------------- | ---------- |
@@ -240,19 +304,132 @@ bitmap是一串连续的2进制数字（0或1），每一位所在的位置为�
 
 
 
-### Redis Module
+**应用案例**
 
-#### BloomFilter
+有1亿用户，5千万登陆用户，那么统计每日用户的登录数。每一位标识一个用户ID，当某个用户访问我们的网站就在Bitmap中把标识此用户的位设置为1。使用set集合和Bitmap存储的对比：
 
-
-
-#### RedisSearch
-
-
-
-#### Redis-ML
+| 数据类型 | 每个 userid 占用空间                                         | 需要存储的用户量 | 全部占用内存量               |
+| -------- | ------------------------------------------------------------ | ---------------- | ---------------------------- |
+| set      | 32位也就是4个字节（假设userid用的是整型，实际很多网站用的是长整型） | 50,000,000       | 32位 * 50,000,000 = 200 MB   |
+| Bitmap   | 1 位（bit）                                                  | 100,000,000      | 1 位 * 100,000,000 = 12.5 MB |
 
 
+
+**应用场景**
+
+- 用户在线状态
+- 用户签到状态
+- 统计独立用户
+
+
+
+### BloomFilter(布隆过滤)
+
+![Redis-BloomFilter](images/Middleware/Redis-BloomFilter.jpg)
+
+当一个元素被加入集合时，通过K个散列函数将这个元素映射成一个位数组中的K个点（使用多个哈希函数对**元素key (bloom中不存value)** 进行哈希，算出一个整数索引值，然后对位数组长度进行取模运算得到一个位置，每个无偏哈希函数都会得到一个不同的位置），把它们置为1。检索时，我们只要看看这些点是不是都是1就（大约）知道集合中有没有它了：
+
+- 如果这些点有任何一个为0，则被检元素一定不在
+- 如果都是1，并不能完全说明这个元素就一定存在其中，有可能这些位置为1是因为其他元素的存在，这就是布隆过滤器会出现误判的原因
+
+
+
+**应用场景**
+
+- **解决缓存穿透**：事先把存在的key都放到redis的**Bloom Filter** 中，他的用途就是存在性检测，如果 BloomFilter 中不存在，那么数据一定不存在；如果 BloomFilter 中存在，实际数据也有可能会不存
+- **黑名单校验**：假设黑名单的数量是数以亿计的，存放起来就是非常耗费存储空间的，布隆过滤器则是一个较好的解决方案。把所有黑名单都放在布隆过滤器中，再收到邮件时，判断邮件地址是否在布隆过滤器中即可
+- **Web拦截器**：用户第一次请求，将请求参数放入布隆过滤器中，当第二次请求时，先判断请求参数是否被布隆过滤器命中，从而提高缓存命中率
+
+
+
+#### 基于Bitmap数据结构
+
+```java
+import com.google.common.base.Preconditions;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
+import java.util.Collection;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class RedisService {
+
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
+
+    /**
+     * 根据给定的布隆过滤器添加值
+     */
+    public <T> void addByBloomFilter(BloomFilterHelper<T> bloomFilterHelper, String key, T value) {
+        Preconditions.checkArgument(bloomFilterHelper != null, "bloomFilterHelper不能为空");
+        int[] offset = bloomFilterHelper.murmurHashOffset(value);
+        for (int i : offset) {
+            redisTemplate.opsForValue().setBit(key, i, true);
+        }
+    }
+
+    /**
+     * 根据给定的布隆过滤器判断值是否存在
+     */
+    public <T> boolean includeByBloomFilter(BloomFilterHelper<T> bloomFilterHelper, String key, T value) {
+        Preconditions.checkArgument(bloomFilterHelper != null, "bloomFilterHelper不能为空");
+        int[] offset = bloomFilterHelper.murmurHashOffset(value);
+        for (int i : offset) {
+            if (!redisTemplate.opsForValue().getBit(key, i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+```
+
+
+
+#### 基于RedisBloom模块
+
+RedisBloom模块提供了四种数据类型：
+
+- **Bloom Filter (布隆过滤器)**
+- **Cuckoo Filter（布谷鸟过滤器）**
+- **Count-Mins-Sketch**
+- **Top-K**
+
+`Bloom Filter` 和 `Cuckoo` 用于确定（以给定的确定性）集合中是否存在某项。使用 `Count-Min Sketch` 来估算子线性空间中的项目数，使用 `Top-K` 维护K个最频繁项目的列表。
+
+```shell
+# 1.git 下载
+[root@test ~]# git clone https://github.com/RedisBloom/RedisBloom.git
+[root@test ~]# cd redisbloom
+[root@test ~]# make
+
+# 2.wget 下载
+[root@test ~]# wget https://github.com/RedisBloom/RedisBloom/archive/v2.0.3.tar.gz
+[root@test ~]# tar -zxvf RedisBloom-2.0.3.tar.gz
+[root@test ~]# cd RedisBloom-2.0.3/
+[root@test ~]# make
+
+# 3.修改Redis Conf
+[root@test ~]#vim /etc/redis.conf
+# 在文件中添加下行
+loadmodule /root/RedisBloom-2.0.3/redisbloom.so
+
+# 4.启动Redis server
+[root@test ~]# /redis-server /etc/redis.conf
+# 或者启动服务时加载os文件
+[root@test ~]# /redis-server /etc/redis.conf --loadmodule /root/RedisBloom/redisbloom.so
+
+# 5.测试RedisBloom
+[root@test ~]# redis-cli
+127.0.0.1:6379> bf.add bloomFilter foo
+127.0.0.1:6379> bf.exists bloomFilter foo
+127.0.0.1:6379> cf.add cuckooFilter foo
+127.0.0.1:6379> cf.exists cuckooFilter foo
+```
 
 
 
