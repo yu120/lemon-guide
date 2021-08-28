@@ -1135,7 +1135,7 @@ Buffer Pool 的使用大大提高了读写数据的效率，但是也带了新�
 
 
 
-## SpringBoot Transaction
+## Spring事务
 
 查看 `mysql` 事务隔离级别：`show variables like 'tx_iso%';`。
 

@@ -333,28 +333,24 @@ fieldset, img {
 /* 块/段落引用 */
 blockquote {
     font-size: 1em;
-    font-style: normal;
-    font-weight: 500;
+    font-style: italic;
+    font-weight: 300;
     padding: 30px 38px;
     margin: 0 0 15px;
     position: relative;
-    line-height: 1.8;
+    line-height: 1.0;
     text-indent: 0;
     border: none;
     color: #888;
-    /*特效*/
-    margin-top: 30px;
-    margin-bottom: 30px;
-    box-shadow: rgb(132 161 168) 0px 10px 15px;
-    border-radius: 0px 0px 10px 10px;
+    border-left: 2px solid var(--blockquote-before-color);
 }
 
 blockquote:before {
-    content: "☠";
+    content: "“";
     left: 12px;
     top: 0;
     color: var(--blockquote-before-color);
-    font-size: 4em;
+    font-size: 3em;
     font-family: Arial, serif;
     line-height: 1em;
     font-weight: 700;
@@ -365,7 +361,7 @@ blockquote:after {
     content: "”";
     right: 12px;
     color: var(--blockquote-after-color);
-    font-size: 4em;
+    font-size: 3em;
     font-family: Arial, serif;
     line-height: 1em;
     font-weight: 700;
