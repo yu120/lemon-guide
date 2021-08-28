@@ -127,7 +127,7 @@ org.springframework.boot.env.YamlPropertySourceLoader
 - **Set：** 去重、赞、踩、共同好友等
 - **Zset：** 访问量排行榜、点击量排行榜等
 
-![img](images/Middleware/1289934-20190621163930814-1395015700.png)
+![Redis-基本数据类型](images/Middleware/Redis-基本数据类型.png)
 
 ### String(字符串)
 
@@ -137,7 +137,7 @@ String 数据结构是简单的 key-value 类型，value 不仅可以是 String�
 
 ### Hash(字典)
 
-![img](images/Middleware/1289934-20190621232209365-1000366002.png)
+![Redis-Hash](images/Middleware/Redis-Hash.png)
 
 在 Memcached 中，我们经常将一些结构化的信息打包成 hashmap，在客户端序列化后存储为一个字符串的值（一般是 JSON 格式），比如用户的昵称、年龄、性别、积分等。这时候在需要修改其中某一项时，通常需要将字符串（JSON）取出来，然后进行反序列化，修改某一项的值，再序列化成字符串（JSON）存储回去。简单修改一个属性就干这么多事情，消耗必定是很大的，也不适用于一些可能并发操作的场合（比如两个并发的操作都需要修改积分）。而 Redis 的 Hash 结构可以使你像在数据库中 Update 一个属性一样只修改某一项属性值。
 
@@ -158,7 +158,7 @@ List 说白了就是链表（redis 使用双端链表实现的 List），相信�
 - 微博 TimeLine
 - 消息队列
 
-![img](images/Middleware/1289934-20190621233618769-504231907.png)
+![Redis-List](images/Middleware/Redis-List.png)
 
 使用列表的技巧
 
@@ -175,7 +175,7 @@ List 说白了就是链表（redis 使用双端链表实现的 List），相信�
 
 ### Set(集合)
 
-![img](images/Middleware/1289934-20190622001013515-677922001.png)
+![Redis-Set](images/Middleware/Redis-Set.png)
 
 Set 就是一个集合，集合的概念就是一堆不重复值的组合。利用 Redis 提供的 Set 数据结构，可以存储一些集合性的数据。比如在微博应用中，可以将一个用户所有的关注人存在一个集合中，将其所有粉丝存在一个集合。因为 Redis 非常人性化的为集合提供了求交集、并集、差集等操作，那么就可以非常方便的实现如共同关注、共同喜好、二度好友等功能，对上面的所有集合操作，你还可以使用不同的命令选择将结果返回给客户端还是存集到一个新的集合中。
 
@@ -192,7 +192,7 @@ Set 就是一个集合，集合的概念就是一堆不重复值的组合。利�
 
 ### Sorted Set(有序集合)
 
-![img](images/Middleware/1289934-20190622000959260-539243592.png)
+![Redis-SortedSet](images/Middleware/Redis-SortedSet.png)
 
 和Sets相比，Sorted Sets是将 Set 中的元素增加了一个权重参数 score，使得集合中的元素能够按 score 进行有序排列，比如一个存储全班同学成绩的 Sorted Sets，其集合 value 可以是同学的学号，而 score 就可以是其考试得分，这样在数据插入集合的时候，就已经进行了天然的排序。另外还可以用 Sorted Sets 来做带权重的队列，比如普通消息的 score 为1，重要消息的 score 为2，然后工作线程可以选择按 score 的倒序来获取工作任务。让重要的任务优先执行。
 
@@ -4959,6 +4959,32 @@ MethodInterceptor是AOP项目中的拦截器，它拦截的目标是方法，即
 过滤器、拦截器添加后的执行顺序：
 
 ![过滤器、拦截器添加后的执行顺序](images/Middleware/过滤器、拦截器添加后的执行顺序.jpg)
+
+
+
+# SpringBoot
+
+## MVC
+
+### HTTP请求处理流程
+
+### 参数绑定
+
+### 过滤器、拦截器、AOP执行顺序
+
+## IOC
+
+### Bean的加载过程
+
+### Bean实例化的过程
+
+## AOP
+
+
+
+## Others
+
+
 
 
 

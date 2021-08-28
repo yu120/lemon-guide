@@ -200,6 +200,10 @@
 
 
 
+关键组件：Redis、RocketMQ、MySQL、Zookeeper、Netty、MyBatis
+
+
+
 # [6 Solution](Solution.md)
 
 ![ServiceDowngrade](images/README/ServiceDowngrade.png)
