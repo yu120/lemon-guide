@@ -1324,12 +1324,6 @@ SELECT * FROM products WHERE id LIKE '3' FOR UPDATE;
 
 
 
-**存在问题**
-
-- 但是hash表索引存在问题，如果要查询带范围的条件时，hash索引就歇菜了
-
-
-
 **优点**
 
 - 快速查询：参与索引的字段只要进行Hash运算之后就可以快速定位到该记录，时间复杂度约为1
