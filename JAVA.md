@@ -1571,7 +1571,7 @@ CopyOnWriteArrayList相当于线程安全的ArrayList，它实现了List接口�
 
 ### HashSet(Hash表)
 
-**HashSet 基于 HashMap，底层是通过 HashMap 的API来实现的。**哈希表边存放的是哈希值。HashSet 存储元素的顺序并不是按照存入时的顺序（和 List 显然不同） 而是按照哈希值来存的所以取数据也是按照哈希值取得。元素的哈希值是通过元素的hashcode 方法来获取的, HashSet 首先判断两个元素的哈希值，如果哈希值一样，接着会比较equals方法，如果 equls 结果为 true ，HashSet 就视为同一个元素；如果 equals 为 false 就不是同一个元素。hashcode相同，equals不相等，则使用链表存储。
+**HashSet 基于 HashMap，底层是通过 HashMap 的API来实现的。**哈希表边存放的是哈希值。HashSet 存储元素的顺序并不是按照存入时的顺序（和 List 显然不同） 而是按照哈希值来存的所以取数据也是按照哈希值取得。元素的哈希值是通过元素的hashcode 方法来获取的, HashSet 首先判断两个元素的哈希值，如果哈希值一样，接着会比较equals方法，如果 equals 结果为 true ，HashSet 就视为同一个元素；如果 equals 为 false 就不是同一个元素。hashcode相同，equals不相等，则使用链表存储。
 
 
 
