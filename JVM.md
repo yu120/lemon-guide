@@ -2,6 +2,8 @@
 
 <span style="color:#16b0ff;font-size:20px;font-weight: 900;font-family: 'Comic Sans MS';">Introduction</span>：收纳技术相关的JVM知识等总结！
 
+<span style="color:#16b0ff;font-size:20px;font-weight: 900;font-family: 'Comic Sans MS';">心法</span>：`数据结构` + `算法` + `操作系统` + `计网` + `底层`
+
 [TOC]
 
 
