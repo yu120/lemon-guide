@@ -7432,4 +7432,3 @@ HAProxy负载均衡与LVS负载均衡的区别：
 [root@test ~] #  make install PREFIX=/usr/local/haproxy
 ```
 
-Redis主从复制-部分重同步.jpeg
