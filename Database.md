@@ -627,6 +627,29 @@ WHERE A.EMP_SUPV_ID = B.EMP_ID;
 
 
 
+锁粒度
+
+- 行锁
+- 表锁
+- 页锁
+
+算法
+
+- Record Lock
+- Gap Lock
+- Next-Key Lock
+
+实现机制
+
+- 悲观锁
+- 乐观锁
+
+兼容性
+
+- 排它锁
+- 共享锁
+- 意向锁
+
 
 
 从加锁策略上分：
