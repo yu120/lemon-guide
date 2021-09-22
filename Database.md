@@ -2401,54 +2401,18 @@ select * from t where k1=1 and k3=3;
 
 # MySQL日志
 
-**生产优化**
-
-- 在生产上，建议 innodb_flush_log_at_trx_commit 设置成 1，可以让每次事务的 redo log 都持久化到磁盘上。保证异常重启后，redo log 不丢失
-- 建议 sync_binlog 设置成 1，可以让每次事务的 binlog 都持久化到磁盘上。保证异常重启后，binlog 不丢失
-
-
-
-**IO性能优化**
-
-- `binlog_group_commit_sync_delay`：表示延迟多少微秒后，再执行 `fsync`
-- `binlog_group_commit_sync_no_delay_count`：表示累计多少次后，在调用 `fsync`
-
-
-
-当 `MySQL` 出现了 `IO` 的性能问题，可以考虑下面的优化策略：
-
-- 设置 `binlog_group_commit_sync_delay` 和 `binlog_group_commit_sync_no_delay_count`。可以使用故意等待来减少，`binlog` 的写盘次数，没有数据丢失的风险，但是会有客户端响应变慢的风险
-- 设置 `sync_binlog` 设置为 `100~1000` 之间的某个值。这样做存在的风险是可能造成 `binlog` 丢失
-- 设置 `innodb_flush_log_at_trx_commit = 2`，可能会丢数据
-
-
-
-**重做日志（redo log）、二进制日志（bin log）、回滚日志（undo log）、错误日志（error log）、慢查询日志（slow query log）、一般查询日志（general log）、中继日志（relay log）**。
-
-
+**重做日志（redo log）、二进制日志（bin log）、回滚日志（undo log）、错误日志（error log）、慢查询日志（slow query log）、一般查询日志（general log）、中继日志（relay log）。**
 
 ## 二进制日志(bin log)
 
-`binlog` 用于记录数据库执行的写入性操作(不包括查询)信息，以二进制的形式保存在磁盘中。`binlog` 是 `mysql`的逻辑日志，并且由 `Server` 层进行记录，使用任何存储引擎的 `mysql` 数据库都会记录 `binlog` 日志。
-
-- **逻辑日志**：可以简单理解为记录的就是sql语句 。
-- **物理日志**：`mysql` 数据最终是保存在数据页中的，物理日志记录的就是数据页变更 。
-
-`binlog` 是通过追加的方式进行写入的，可以通过`max_binlog_size` 参数设置每个 `binlog`文件的大小，当文件大小达到给定值之后，会生成新的文件来保存日志。
-
-### 作用
-
-- 用于复制，在主从复制中，从库利用主库上的binlog进行重播，实现主从同步
-- 用于数据库的基于时间点的还原
+`binlog` 用于记录数据库执行的写入性操作(不包括查询)信息，以二进制的形式保存在磁盘中。`binlog` 是 `mysql`的逻辑日志(即SQL语句)，并且由 `Server` 层进行记录，使用任何存储引擎的 `mysql` 数据库都会记录 `binlog` 日志。`binlog` 是通过追加的方式进行写入的，可以通过`max_binlog_size` 参数设置每个 `binlog`文件的大小，当文件大小达到给定值之后，会生成新的文件来保存日志。
 
 
 
-### 使用场景
+**作用**
 
-在实际应用中， `binlog` 的主要使用场景有两个，分别是 **主从复制** 和 **数据恢复** 。
-
-- **主从复制** ：在 `Master` 端开启 `binlog` ，然后将 `binlog`发送到各个 `Slave` 端， `Slave` 端重放 `binlog` 从而达到主从数据一致
-- **数据恢复** ：通过使用 `mysqlbinlog` 工具来恢复数据
+- **主从复制**：在主从复制中，从库利用主库上的binlog进行重播，实现主从同步
+- **数据恢复**：通过使用mysqlbinlog`工具来实现数据库基于时间点的还原
 
 
 
@@ -2456,9 +2420,9 @@ select * from t where k1=1 and k3=3;
 
 对于 `InnoDB` 存储引擎而言，只有在事务提交时才会记录`biglog` ，此时记录还在内存中，那么 `biglog`是什么时候刷到磁盘中的呢？`mysql` 通过 `sync_binlog` 参数控制 `biglog` 的刷盘时机，取值范围是 `0-N`：
 
-- `sync_binlog=0`：不去强制要求，由系统自行判断何时写入磁盘；
-- `sync_binlog=1`：每次 `commit` 的时候都要将 `binlog` 写入磁盘；
-- `sync_binlog=N(N>1)`：每N个事务，才会将 `binlog` 写入磁盘。
+- `sync_binlog=0`：不去强制要求，由系统自行判断何时写入磁盘
+- `sync_binlog=1`：每次 `commit` 的时候都要将 `binlog` 写入磁盘
+- `sync_binlog=N(N>1)`：每N个事务，才会将 `binlog` 写入磁盘
 
 从上面可以看出， `sync_binlog` 最安全的是设置是 `1` ，这也是`MySQL 5.7.7`之后版本的默认值。但是设置一个大一些的值可以提升数据库性能，因此实际情况下也可以将值适当调大，牺牲一定的一致性来获取更好的性能。
 
@@ -2466,39 +2430,47 @@ select * from t where k1=1 and k3=3;
 
 ### 日志格式
 
-`binlog` 日志有三种格式，分别为 `STATMENT` 、 `ROW` 和 `MIXED`。
+`binlog` 日志有三种格式，日志格式通过 `binlog-format` 指定。在 `MySQL 5.7.7` 之前，默认的格式是 `STATEMENT` ， `MySQL 5.7.7` 之后，默认值是 `ROW`。
 
-在 `MySQL 5.7.7` 之前，默认的格式是 `STATEMENT` ， `MySQL 5.7.7` 之后，默认值是 `ROW`。日志格式通过 `binlog-format` 指定。
-
-- `STATMENT`：基于`SQL`语句的复制( `statement-based replication, SBR` )，每一条会修改数据的sql语句会记录到`binlog` 中
-- - 优点：不需要记录每一行的变化，减少了 binlog 日志量，节约了 IO  , 从而提高了性能；
-  - 缺点：在某些情况下会导致主从数据不一致，比如执行sysdate() 、  slepp()  等 。
-- `ROW`：基于行的复制(`row-based replication, RBR` )，不记录每条sql语句的上下文信息，仅需记录哪条数据被修改了 。
-  - 优点：不会出现某些特定情况下的存储过程、或function、或trigger的调用和触发无法被正确复制的问题 ；
-  - 缺点：会产生大量的日志，尤其是` alter table ` 的时候会让日志暴涨
+- `STATMENT`：基于`SQL`语句复制(`statement-based replication, SBR`)，每一条会修改数据的sql语句会记录到`binlog`中
+  - **优点**：不需要记录每一行的变化，减少了binlog日志量，节约了IO，从而提高了性能
+  - **缺点**：在某些情况下会导致主从数据不一致，比如执行sysdate()、slepp() 等
+- `ROW`：基于行复制(`row-based replication, RBR` )，不记录每条sql语句的上下文信息，仅需记录哪条数据被修改了。
+  - **优点**：不会出现某些特定情况下的存储过程、或function、或trigger的调用和触发无法被正确复制的问题
+  - **缺点**：会产生大量的日志，尤其是` alter table ` 的时候会让日志暴涨
 - `MIXED`：基于`STATMENT` 和 `ROW` 两种模式的混合复制(`mixed-based replication, MBR` )，一般的复制使用`STATEMENT` 模式保存 `binlog` ，对于 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存 `binlog`
 
 
 
 ## 重做日志(redo log)
 
-重做日志（redo log）是InnoDB引擎层的日志，用来记录事务操作引起数据的变化，记录的是数据页的物理修改。
+**重做日志是InnoDB引擎层日志，用来记录事务操作引起数据变化，记录的是数据页的物理修改。**包括两部分：
 
-在MySQL里，如果我们要执行一条更新语句。执行完成之后，数据不会立马写入磁盘，因为这样对磁盘IO的开销比较大。MySQL里面有一种叫做WAL（Write-Ahead Logging），就是先写日志再写磁盘。就是当有一条记录需要更新的时候，InnoDB 会先写redo log 里面，并更新内存，这个时候更新的操作就算完成了。之后，MySQL会在合适的时候将操作记录 flush 到磁盘上面。当然 flush 的条件可能是系统比较空闲，或者是 redo log 空间不足时。redo log 文件的大小是固定的，比如可以是由4个1GB文件组成的集合。
+- **内存中的日志缓冲(redo log buffer)**
+- **磁盘上的日志文件(redo logfile)**
 
-### 作用
+MySQL 每执行一条 DML 语句，先将记录写入 redo log buffer，后续某个时间点再一次性将多个操作记录写到 redo log file，种先写日志再写磁盘的技术就是 WAL(Write-Ahead Logging) 技术。之后MySQL会在合适的时候将操作记录 flush 到磁盘上面，flush 的条件可能是系统比较空闲，或 redo log 空间不足时。redo log 文件的大小是固定的，如可以是由4个1GB文件组成的集合。
 
-确保事务的持久性。防止在发生故障的时间点，尚有脏页未写入磁盘，在重启mysql服务的时候，根据redo log进行重做，从而达到事务的持久性这一特性。
+
+
+**WAL(Write-Ahead Logging)** 
+
+
+
+**作用**
+
+- **确保事务的持久性**
+- **防止发生故障时，尚有脏页未写入磁盘**。在重启mysql服务时，根据redo log进行重做，从而达到事务的持久性特性
 
 
 
 ### 写入流程
 
-为了控制 redo log 的写入策略，innodb_flush_log_at_trx_commit 会有下面 3 中取值：
+为了控制 `redo log` 的写入策略，`innodb_flush_log_at_trx_commit` 会有下面 3 中取值：
 
-- **0：每次提交事务只写在 redo log buffer 中**
-- **1：每次提交事务持久化到磁盘**
-- **2：每次提交事务写到 文件系统的 page cache 中**
+- `0`：**每次提交事务只写在 `redo log buffer` 中**
+- `1`：**每次提交事务持久化到磁盘**
+- `2`：**每次提交事务写到 文件系统的 `page cache` 中**
 
 
 
@@ -2516,11 +2488,20 @@ redo log 实际的触发 fsync 操作写盘包含以下几个场景：
 
 ## 回滚日志(undo log)
 
-### 作用
+undo log记录的是数据修改之前的数据。主要用于**回滚，**MySQL数据库事务的**原子性**就是通过 undo log实现的。
 
-保证数据的原子性，保存了事务发生之前的数据的一个版本，可以用于回滚，同时可以提供多版本并发控制下的读（MVCC），也即非锁定读。
+undo log主要存储的是数据的逻辑变化日志，比如我们要 insert 一条数据，那么 undo log 就会生成一条对应的 delete 日志。所以当需要回滚时，只需要利用undo log 就可以恢复都修改前的数据。
+
+undo log另一个作用是用来实现**多版本并发控制 MVCC。**
+
+undo记录中包含了记录更改前的镜像，如果更改数据的事务未提交，对于隔离级别大于等于 read commit的事务而言，不应该返回更改后的数据，而应该返回更改前的数据。
 
 
+
+**作用**
+
+- 保证数据的原子性。保存了事务发生之前的数据的一个版本，可以用于回滚
+- 可以提供多版本并发控制下的读（MVCC），也即非锁定读
 
 
 
