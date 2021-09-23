@@ -416,7 +416,7 @@ public class Node<E> {
 
 栈是一种**先进后出**（`FILO`，First in last out）或**后进先出**（`LIFO`，Last in first out）的数据结构。
 
-![数据结构-stack](images/Algorithm/数据结构-stack.png)
+![Stack-Push-and-Pop-Operations](images/Algorithm/Stack-Push-and-Pop-Operations.png)
 
 - **单向链表**：可以利用一个单链表来实现栈的数据结构。而且，因为我们都只针对栈顶元素进行操作，所以借用单链表的头就能让所有栈的操作在 O(1) 的时间内完成。
 - **Stack**：是Vector的子类，比Vector多了几个方法
@@ -511,7 +511,7 @@ public class Stack<E> extends Vector<E> {
 - **栈**：采用**后进先出**（`LIFO`）
 - **队列**：采用 **先进先出**（First in First Out，即`FIFO`）
 
-![数据结构-queue](images/Algorithm/数据结构-queue.png)
+![FIFO-Representation-of-Queue](images/Algorithm/FIFO-Representation-of-Queue.png)
 
 **实现方式**
 
@@ -939,7 +939,9 @@ public class TreeNode {
 
 
 
-#### B树(Balance Tree)
+#### B-树(Balance Tree)
+
+![B-tree图解](images/Algorithm/B-tree图解.png)
 
 对于在内存中的查找结构而言，红黑树的效率已经非常好了(实际上很多实际应用还对RBT进行了优化)。但是如果是数据量非常大的查找呢？将这些数据全部放入内存组织成RBT结构显然是不实际的。实际上，像OS中的文件目录存储，数据库中的文件索引结构的存储…. 都不可能在内存中建立查找结构。必须在磁盘中建立好这个结构。
 在磁盘中组织查找结构，从任何一个结点指向其他结点都有可能读取一次磁盘数据，再将数据写入内存进行比较。大家都知道，频繁的磁盘IO操作，效率是很低下的(机械运动比电子运动要慢不知道多少)。显而易见，所有的二叉树的查找结构在磁盘中都是低效的。因此，B树很好的解决了这一个问题。
@@ -963,6 +965,8 @@ public class TreeNode {
 
 
 
+**案例分析**
+
 如下图（B树的内部节点可以存放数据，类似ZK的中间节点一样。B树不是每个节点都有足够多的子节点）：
 
 ![BalanceTree](images/Algorithm/BalanceTree.png)
@@ -973,12 +977,18 @@ public class TreeNode {
 
 #### B+树(B+Tree)
 
+![B+tree图解](images/Algorithm/B+tree图解.png)
+
 **B+树是从B树的变体**。跟B树的不同：
 
 - **内部节点不保存数据，只用于索引**
 - **B+树的每个叶子节点之间存在指针相连，而且是单链表**，叶子节点本身依关键字的大小自小而大顺序链接
 
-如下图（其实B+树上二叉搜索树的扩展，二叉搜索树是每次一分为二，B树是每次一分为多），现代操作系统中，磁盘的存储结构使用的是B+树机制，mysql的innodb引擎的存储方式也是B+树机制：
+
+
+**案例分析**
+
+如下图，其实B+树上二叉搜索树的扩展，二叉搜索树是每次一分为二，B树是每次一分为多，现代操作系统中，磁盘的存储结构使用的是B+树机制，mysql的innodb引擎的存储方式也是B+树机制：
 
 ![B+Tree](images/Algorithm/B+Tree.png)
 
@@ -1005,6 +1015,18 @@ public class TreeNode {
 
 
 ## 高级数据结构
+
+### 哈希表(Hash Table)
+
+In a hash table, a new index is processed using the keys. And, the element corresponding to that key is stored in the index. This process is called **hashing**.
+
+Let k be a key and h(x) be a hash function. Here, h(k) will give us a new index to store the element linked with k.
+
+![Hash-table-Representation](images/Algorithm/Hash-table-Representation.png)
+
+
+
+
 
 ### 优先队列（Priority Queue）
 
@@ -1227,7 +1249,11 @@ public class Solution {
 
 **最大堆**：任何一个父节点的值，都 **大于** 或 **等于** 它左、右子节点的值，**堆顶** 是整个堆中的 **最大** 元素。
 
+![Max-heap](images/Algorithm/Max-heap.png)
+
 **最小堆**：任何一个父节点的值，都 **小于** 或 **等于** 它左、右孩子节点的值，**堆顶** 是整个堆中的 **最小** 元素。
+
+![Min-heap](images/Algorithm/Min-heap.png)
 
 
 
