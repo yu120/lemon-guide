@@ -6,6 +6,9 @@
 
 用最少的图文来讲解清楚每一个知识点，如果欢迎大家一起加入！
 
+开源地址：
+- Gitee：https://gitee.com/yu120/lemon-guide
+- Github：https://github.com/yu120/lemon-guide
 
 # [1 OS](OS.md)
 
