@@ -2045,6 +2045,83 @@ public void unlock() {
 
 ## Redis
 
+https://mp.weixin.qq.com/s?__biz=MzAwMDg2OTAxNg==&mid=2652055114&idx=1&sn=f4d73fa2e294d633224f4d94a0667e70&chksm=8105d1bdb67258ab458389bd23d8e0211d34835f9da3745a0e6c244ec943911220db0c011665&mpshare=1&scene=23&srcid=1014HUmkIFVfi7rEQQ6bmuqH&sharer_sharetime=1634173594040&sharer_shareid=0f9991a2eb945ab493c13ed9bfb8bf4b%23rd
+
+### 分布式锁的问题
+
+#### 非原子操作
+
+`加锁操作`和后面的`设置超时时间`是分开的，并`非原子操作`。解决方案：
+
+- **set命令**
+- **LUA脚本**
+
+
+
+#### 忘了释放锁
+
+在redis中还有`set`命令是原子操作，加锁和设置超时时间，一个命令就能轻松搞定。
+
+```java
+String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
+if ("OK".equals(result)) {
+    return true;
+}
+return false;
+```
+
+其中：
+
+- `lockKey`：锁的标识
+- `requestId`：请求id
+- `NX`：只在键不存在时，才对键进行设置操作
+- `PX`：设置键的过期时间为 millisecond 毫秒
+- `expireTime`：过期时
+
+使用`set`命令加锁，表面上看起来没有问题。但如果仔细想想，加锁之后，每次都要达到了超时时间才释放锁，会不会有点不合理？加锁后，如果不及时释放锁，会有很多问题。分布式锁更合理的流程如下：
+
+![Redis释放锁流程](images/Solution/Redis释放锁流程.jpg)
+
+释放锁的伪代码如下：
+
+```java
+try{
+  String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
+  if ("OK".equals(result)) {
+      return true;
+  }
+  return false;
+} finally {
+    unlock(lockKey);
+}  
+```
+
+
+
+#### 释放了别人的锁
+
+
+
+#### 大量失败请求
+
+
+
+#### 锁重入问题
+
+
+
+#### 锁竞争问题
+
+
+
+#### 锁超时问题
+
+
+
+#### 主从复制的问题
+
+
+
 ### LUA+SETNX+EXPIRE
 
 先用`setnx`来抢锁，如果抢到之后，再用`expire`给锁设置一个过期时间，防止锁忘记了释放。
