@@ -2045,22 +2045,13 @@ public void unlock() {
 
 ## Redis
 
-https://mp.weixin.qq.com/s?__biz=MzAwMDg2OTAxNg==&mid=2652055114&idx=1&sn=f4d73fa2e294d633224f4d94a0667e70&chksm=8105d1bdb67258ab458389bd23d8e0211d34835f9da3745a0e6c244ec943911220db0c011665&mpshare=1&scene=23&srcid=1014HUmkIFVfi7rEQQ6bmuqH&sharer_sharetime=1634173594040&sharer_shareid=0f9991a2eb945ab493c13ed9bfb8bf4b%23rd
-
-### 分布式锁的问题
+### 锁的问题
 
 #### 非原子操作
 
 `加锁操作`和后面的`设置超时时间`是分开的，并`非原子操作`。解决方案：
 
-- **set命令**
-- **LUA脚本**
-
-
-
-#### 忘了释放锁
-
-在redis中还有`set`命令是原子操作，加锁和设置超时时间，一个命令就能轻松搞定。
+**方案一：set命令**
 
 ```java
 String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
@@ -2070,7 +2061,7 @@ if ("OK".equals(result)) {
 return false;
 ```
 
-其中：
+在redis中还有`set`命令是原子操作，加锁和设置超时时间，一个命令就能轻松搞定。其中：
 
 - `lockKey`：锁的标识
 - `requestId`：请求id
@@ -2078,7 +2069,29 @@ return false;
 - `PX`：设置键的过期时间为 millisecond 毫秒
 - `expireTime`：过期时
 
-使用`set`命令加锁，表面上看起来没有问题。但如果仔细想想，加锁之后，每次都要达到了超时时间才释放锁，会不会有点不合理？加锁后，如果不及时释放锁，会有很多问题。分布式锁更合理的流程如下：
+
+
+**方案二：LUA脚本**
+
+```lua
+if (redis.call('exists', KEYS[1]) == 0) then
+    	redis.call('hset', KEYS[1], ARGV[2], 1); 
+    	redis.call('pexpire', KEYS[1], ARGV[1]); 
+		return nil; 
+end
+if (redis.call('hexists', KEYS[1], ARGV[2]) == 1)
+		redis.call('hincrby', KEYS[1], ARGV[2], 1); 
+		redis.call('pexpire', KEYS[1], ARGV[1]); 
+		return nil; 
+end
+return redis.call('pttl', KEYS[1]);
+```
+
+
+
+#### 忘了释放锁
+
+加锁之后，每次都要达到了超时时间才释放锁，不会有点不合理。如果不及时释放锁，会有很多问题。合理流程如下：
 
 ![Redis释放锁流程](images/Solution/Redis释放锁流程.jpg)
 
@@ -2086,13 +2099,13 @@ return false;
 
 ```java
 try{
-  String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
-  if ("OK".equals(result)) {
-      return true;
-  }
-  return false;
+      String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
+      if ("OK".equals(result)) {
+          return true;
+      }
+      return false;
 } finally {
-    unlock(lockKey);
+   	 unlock(lockKey);
 }  
 ```
 
@@ -2100,25 +2113,267 @@ try{
 
 #### 释放了别人的锁
 
+自己只能释放自己加的锁，不允许释放别人加的锁。
+
+**方案一：requestId方案**
+
+伪代码如下：
+
+```java
+if (jedis.get(lockKey).equals(requestId)) {
+    jedis.del(lockKey);
+    return true;
+}
+return false;
+```
+
+**方案二：LUA脚本方案**
+
+```lua
+if redis.call('get', KEYS[1]) == ARGV[1] then 
+	return redis.call('del', KEYS[1]) 
+else 
+ 	return 0 
+end
+```
+
 
 
 #### 大量失败请求
+
+在秒杀场景下，会有什么问题？每1万个同时请求，有1个成功。再1万个同时请求，有1个成功。如此下去，直到库存不足。这就变成均匀分布的秒杀了，跟我们想象中的不一样（应该是谁先来谁得到）。
+
+**解决方案：自旋锁**
+
+在规定的时间，比如500毫秒内，自旋不断尝试加锁（说白了，就是在死循环中，不断尝试加锁），如果成功则直接返回。如果失败，则休眠50毫秒，再发起新一轮的尝试。如果到了超时时间，还未加锁成功，则直接返回失败。
+
+```java
+try {
+  Long start = System.currentTimeMillis();
+  while(true) {
+           String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
+           if ("OK".equals(result)) {
+                 // 创建订单
+                 createOrder();
+                  return true;
+           }
+
+           long time = System.currentTimeMillis() - start;
+            if (time>=timeout) {
+                  return false;
+            }
+    
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+  }
+} finally{
+    unlock(lockKey,requestId);
+}  
+return false;
+```
 
 
 
 #### 锁重入问题
 
+假设需要获取一颗满足条件的菜单树。需要在接口中从根节点开始，递归遍历出所有满足条件的子节点，然后组装成一颗菜单树。在后台系统中运营同学可以动态添加、修改和删除菜单。为了保证在并发的情况下，每次都可能获取最新的数据，这里可以加redis分布式锁。在递归方法中递归遍历多次，每次都是加的同一把锁。递归第一层当然是可以加锁成功的，但递归第二层、第三层...第N层，不就会加锁失败了？
+
+递归方法中加锁的伪代码（会出现异常）如下：
+
+```java
+private int expireTime = 1000;
+public void fun(int level,String lockKey,String requestId){
+  try{
+     String result = jedis.set(lockKey, requestId, "NX", "PX", expireTime);
+     if ("OK".equals(result)) {
+        if(level<=10){
+           this.fun(++level,lockKey,requestId);
+        } else {
+           return;
+        }
+     }
+     return;
+  } finally {
+     unlock(lockKey,requestId);
+  }
+}
+```
+
+**基于Redisson实现可重入锁**
+
+伪代码如下：
+
+```java
+private int expireTime = 1000;
+
+public void run(String lockKey) {
+  RLock lock = redisson.getLock(lockKey);
+  this.fun(lock,1);
+}
+
+public void fun(RLock lock,int level){
+  try{
+      lock.lock(5, TimeUnit.SECONDS);
+      if(level<=10){
+         this.fun(lock,++level);
+      } else {
+         return;
+      }
+  } finally {
+     lock.unlock();
+  }
+}
+```
+
 
 
 #### 锁竞争问题
+
+如果有大量需要写入数据的业务场景，使用普通的redis分布式锁是没有问题的。但如果有些业务场景，写入的操作比较少，反而有大量读取的操作。这样直接使用普通的redis分布式锁，会不会有点浪费性能？
+
+**读写锁**
+
+读写锁的特点：
+
+- **读与读是共享的，不互斥**
+- **读与写互斥**
+- **写与写互斥**
+
+我们以redisson框架为例，它内部已经实现了读写锁的功能。读锁的伪代码如下：
+
+```java
+RReadWriteLock readWriteLock = redisson.getReadWriteLock("readWriteLock");
+RLock rLock = readWriteLock.readLock();
+try {
+    rLock.lock();
+    //业务操作
+} catch (Exception e) {
+    log.error(e);
+} finally {
+    rLock.unlock();
+}
+```
+
+写锁的伪代码如下：
+
+```java
+RReadWriteLock readWriteLock = redisson.getReadWriteLock("readWriteLock");
+RLock rLock = readWriteLock.writeLock();
+try {
+    rLock.lock();
+    //业务操作
+} catch (InterruptedException e) {
+   log.error(e);
+} finally {
+    rLock.unlock();
+}
+```
+
+将读锁和写锁分开，最大的好处是提升读操作的性能，因为读和读之间是共享的，不存在互斥性。而我们的实际业务场景中，绝大多数数据操作都是读操作。所以，如果提升了读操作的性能，也就会提升整个锁的性能。
+
+
+
+**锁分段**
+
+此外，为了减小锁的粒度，比较常见的做法是将大锁：`分段`。
+
+比如在秒杀扣库存的场景中，现在的库存中有2000个商品，用户可以秒杀。为了防止出现超卖的情况，通常情况下，可以对库存加锁。如果有1W的用户竞争同一把锁，显然系统吞吐量会非常低。
+
+为了提升系统性能，我们可以将库存分段，比如：分为100段，这样每段就有20个商品可以参与秒杀。
+
+在秒杀的过程中，先把用户id获取hash值，然后除以100取模。模为1的用户访问第1段库存，模为2的用户访问第2段库存，模为3的用户访问第3段库存，后面以此类推，到最后模为100的用户访问第100段库存。
+
+![Redis分布式锁-分段锁](images/Solution/Redis分布式锁-分段锁.png)
+
+**注意**：将锁分段虽说可以提升系统的性能，但它也会让系统的复杂度提升不少。因为它需要引入额外的路由算法，跨段统计等功能。我们在实际业务场景中，需要综合考虑，不是说一定要将锁分段。
 
 
 
 #### 锁超时问题
 
+如果线程A加锁成功了，但是由于业务功能耗时时间很长，超过了设置的超时时间，这时候redis会自动释放线程A加的锁。
+
+**解决方案：自动续期**
+
+自动续期的功能是获取锁之后开启一个定时任务，每隔10秒判断一下锁是否存在，如果存在，则刷新过期时间。如果续期3次，也就是30秒之后，业务方法还是没有执行完，就不再续期了。
+
+我们可以使用`TimerTask`类，来实现自动续期的功能：
+
+```java
+Timer timer = new Timer(); 
+timer.schedule(new TimerTask() {
+    @Override
+    public void run(Timeout timeout) throws Exception {
+      	//自动续期逻辑
+    }
+}, 10000, TimeUnit.MILLISECONDS);
+```
+
+获取锁之后，自动开启一个定时任务，每隔10秒钟，自动刷新一次过期时间。这种机制在redisson框架中，有个比较霸气的名字：`watch dog`，即传说中的`看门狗`。当然自动续期功能，我们还是优先推荐使用lua脚本实现，比如：
+
+```lua
+if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then 
+     redis.call('pexpire', KEYS[1], ARGV[1]);
+     return 1; 
+end;
+return 0;
+```
+
+**需要**：在实现自动续期功能时，还需要设置一个总的过期时间，可以跟redisson保持一致，设置成30秒。如果业务代码到了这个总的过期时间，还没有执行完，就不再自动续期了。
+
 
 
 #### 主从复制的问题
+
+如果redis存在多个实例。比如：做了主从或使用了哨兵模式，基于redis的分布式锁的功能，就会出现问题。
+
+比如锁A刚加锁成功master就挂了，还没来得及同步到slave上。这样会导致新master节点中的锁A丢失了。后面，如果有新的线程，使用锁A加锁，依然可以成功，分布式锁失效了。
+
+
+
+**解决方案：RedissonRedLock**
+
+RedissonRedLock解决问题的思路如下：
+
+1. 需要搭建几套相互独立的redis环境，假如我们在这里搭建了5套
+2. 每套环境都有一个redisson node节点
+3. 多个redisson node节点组成了RedissonRedLock
+4. 环境包含：单机、主从、哨兵和集群模式，可以是一种或者多种混合
+
+在这里我们以主从为例，架构图如下：
+
+![RedissonRedLock](images/Solution/RedissonRedLock.png)
+
+RedissonRedLock加锁过程如下：
+
+1. 获取所有的redisson node节点信息，循环向所有的redisson node节点加锁，假设节点数为N，例子中N等于5
+2. 如果在N个节点当中，有N/2 + 1个节点加锁成功了，那么整个RedissonRedLock加锁是成功的
+3. 如果在N个节点当中，小于N/2 + 1个节点加锁成功，那么整个RedissonRedLock加锁是失败的
+4. 如果中途发现各个节点加锁的总耗时，大于等于设置的最大等待时间，则直接返回失败
+
+从上面可以看出，使用Redlock算法，确实能解决多实例场景中，假如master节点挂了，导致分布式锁失效的问题。但也引出了一些新问题，比如：
+
+- 需要额外搭建多套环境，申请更多的资源，需要评估一下成本和性价比
+- 如果有N个redisson node节点，需要加锁N次，最少也需要加锁N/2+1次，才知道redlock加锁是否成功。显然，增加了额外的时间成本，有点得不偿失
+
+
+
+**场景选择**
+
+在实际业务场景，尤其是高并发业务中，RedissonRedLock其实使用的并不多。在分布式环境中，CAP是绕不过去的：一致性（Consistency）、可用性（Availability）、分区容错性（Partition tolerance）。
+
+- 如果你的实际业务场景，更需要的是**保证数据一致性**，那么请使用CP类型的分布式锁
+
+  比如：zookeeper，它是基于磁盘的，性能可能没那么好，但数据一般不会丢
+
+- 如果你的实际业务场景，更需要的是**保证数据高可用性**。那么请使用AP类型的分布式锁
+
+  比如：redis，它是基于内存的，性能比较好，但有丢失数据的风险
+
+其实，在绝大多数分布式业务场景中，使用redis分布式锁就够了，真的别太较真。因为数据不一致问题，可以通过最终一致性方案解决。但如果系统不可用了，对用户来说是暴击一万点伤害。
 
 
 
